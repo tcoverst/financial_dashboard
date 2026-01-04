@@ -130,6 +130,13 @@
         .tv-widget-container { flex-grow: 1; width: 100%; height: auto; }
 
         /* Tables */
+        /* Table Wrapper for Scroll */
+        .table-responsive {
+            width: 100%;
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch; /* Smooth scroll on iOS */
+        }
+        
         table { width: 100%; border-collapse: collapse; font-size: 0.9em; }
         th, td { padding: 12px 15px; text-align: right; border-bottom: 1px solid #eee; white-space: nowrap; }
         th:first-child, td:first-child { text-align: left; }
@@ -165,7 +172,7 @@
         /* MOBILE OPTIMIZATIONS */
         @media (max-width: 768px) {
             body { 
-                padding: 5px; /* Minimal padding to stretch content */
+                padding: 5px; /* Minimal padding */
             }
             
             header { 
@@ -176,49 +183,51 @@
             header > div { width: 100%; }
             header div:last-child { text-align: left !important; margin-top: 5px; }
 
-            /* FORCE 2 COLUMNS FOR STATS */
+            /* 1. STATS: 2 COLUMNS */
             .stats-grid { 
-                grid-template-columns: 1fr 1fr; /* Explicitly 2 columns */
+                grid-template-columns: 1fr 1fr; 
                 gap: 10px;
             } 
             
             .stat-card {
-                padding: 15px 10px; /* Reduced padding inside cards */
+                padding: 12px 10px;
             }
             
             .stat-value { 
-                font-size: 1.3em; /* Slightly smaller to fit 2 cols */
+                font-size: 1.4em; /* Fits better in 2 cols */
             }
             
             .stat-label {
-                font-size: 0.75em;
+                font-size: 0.7em;
             }
             
-            /* FULL WIDTH TABLES / CARDS */
+            /* 2. TRADINGVIEW: REDUCED HEIGHT */
+            .tv-card {
+                height: 450px !important; /* Override desktop 850px */
+            }
+
+            /* 3. CHARTS: ADJUSTED ASPECT RATIO (Shorter) */
+            /* This mimics the laptop 'wide' look on a small screen */
+            .chart-container { height: 250px !important; }
+            .chart-container-tall { height: 300px !important; }
+
+            /* 4. TABLES: COMPACT & SCROLLABLE */
             .card { 
-                padding: 10px 5px; /* Minimal side padding */
+                padding: 10px 5px;
                 margin-bottom: 15px;
             }
             
-            th, td { padding: 10px 4px; font-size: 0.8em; }
-            
-            .chart-container { height: 300px; }
-            .chart-container-tall { height: 350px; }
-            
-            /* SCALED DOWN TABLES FOR MOBILE */
-            /* This forces the table container to be wide (like desktop) but scaled down to fit */
-            .card > div[style*="overflow-x: auto"] {
-                overflow-x: hidden !important; /* Hide scrollbars since we are scaling */
-                width: 100%;
-                display: block;
+            /* Make text smaller to fit more columns */
+            th, td { 
+                padding: 8px 4px; 
+                font-size: 0.75em; /* 12px approx */
             }
-
-            table {
+            
+            /* Ensure the scroll container works */
+            .table-responsive {
                 display: block;
-                width: 160% !important; /* Force table to be wider than screen */
-                transform: scale(0.62); /* Scale it back down to fit (100/160 = 0.625) */
-                transform-origin: top left; /* Anchor to top left */
-                margin-bottom: -38%; /* Remove the empty whitespace created by scaling */
+                width: 100%;
+                overflow-x: auto;
             }
 
             /* Adjust dropdown width */
@@ -282,7 +291,7 @@
     <div class="charts-row">
         <div class="card">
             <h3>Current Investment Breakdown (Latest Month)</h3>
-            <div style="overflow-x: auto;">
+            <div class="table-responsive">
                 <table id="snapshotTable">
                     <thead>
                         <tr>
@@ -315,7 +324,7 @@
 
     <div class="card">
         <h3>Investment History Details</h3>
-        <div style="overflow-x: auto; max-height: 400px;">
+        <div class="table-responsive" style="max-height: 400px;">
             <table id="historyTable">
                 <thead>
                     <tr id="historyHeader">
@@ -373,7 +382,7 @@
 
     <div class="card">
         <h3>Compensation History Details</h3>
-        <div style="overflow-x: auto; max-height: 400px;">
+        <div class="table-responsive" style="max-height: 400px;">
             <table id="salaryTable">
                 <thead>
                     <tr>
@@ -448,7 +457,7 @@
             The "Monthly Inflow" (your investment contributions) automatically increases by <strong>6% every January</strong> (simulating raises/bonus) and <strong>3% every July</strong> (simulating mid-year adjustments).
         </div>
     
-        <div style="overflow-x: auto; max-height: 500px;">
+        <div class="table-responsive" style="max-height: 500px;">
             <table id="projectionTable">
                 <thead>
                     <tr>
