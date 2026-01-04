@@ -206,10 +206,10 @@
                 height: 450px !important; /* Override desktop 850px */
             }
 
-            /* 3. CHARTS: ADJUSTED ASPECT RATIO (Shorter) */
-            /* This mimics the laptop 'wide' look on a small screen */
+            /* 3. CHARTS: TALLER FOR STACKED DATA */
             .chart-container { height: 250px !important; }
-            .chart-container-tall { height: 300px !important; }
+            /* INCREASED HEIGHT FOR BALANCE HISTORY */
+            .chart-container-tall { height: 550px !important; }
 
             /* 4. TABLES: COMPACT & SCROLLABLE */
             .card { 
@@ -489,6 +489,9 @@
     // ==========================================
     // UTILITIES
     // ==========================================
+    // Mobile Detection
+    const isMobile = window.innerWidth <= 768;
+
     function cleanMoney(str) {
         if (!str) return 0;
         const s = String(str).replace(/[$,"]/g, '').trim();
@@ -589,7 +592,7 @@
                     legend: { position: 'top' },
                     datalabels: {
                         color: (ctx) => ctx.dataset.backgroundColor === '#f1c40f' ? '#000' : '#fff',
-                        font: { weight: 'bold', size: 10 },
+                        font: { weight: 'bold', size: isMobile ? 8 : 10 }, // Mobile Font Fix
                         formatter: (val) => val > 500 ? fmtMoneySimple(val) : ''
                     }
                 },
@@ -612,7 +615,7 @@
                 plugins: {
                     legend: { position: 'right' },
                     datalabels: {
-                        color: '#fff', font: { weight: 'bold' }, textAlign: 'center',
+                        color: '#fff', font: { weight: 'bold', size: isMobile ? 9 : 12 }, textAlign: 'center',
                         formatter: (val, ctx) => {
                             let sum = ctx.dataset.data.reduce((a, b) => a + b, 0);
                             let pct = ((val*100) / sum).toFixed(1) + "%";
@@ -689,7 +692,7 @@
                 label: { 
                     display: true, content: 'Porsche 911 (-$300k)', position: 'start', 
                     backgroundColor: 'rgba(243, 156, 18, 0.9)', color: 'white',
-                    font: { size: 12, weight: 'bold' }, yAdjust: -20, xAdjust: 10 
+                    font: { size: isMobile ? 9 : 12, weight: 'bold' }, yAdjust: -20, xAdjust: 10 
                 }
             },
             houseLine: {
@@ -697,7 +700,7 @@
                 label: { 
                     display: true, content: 'Beach House (-$5M)', position: 'start', 
                     backgroundColor: 'rgba(22, 160, 133, 0.9)', color: 'white',
-                    font: { size: 12, weight: 'bold' }, yAdjust: -20, xAdjust: 10 
+                    font: { size: isMobile ? 9 : 12, weight: 'bold' }, yAdjust: -20, xAdjust: 10 
                 }
             }
         };
@@ -765,7 +768,7 @@
                     annotations[`porsche_${idx}`] = {
                         type: 'label', xValue: labels[i], yValue: 3,
                         content: [`${year}`, `${(rate*100).toFixed(1)}%`],
-                        position: 'center', color: colors[idx], font: { weight: 'bold', size: 10 }, yAdjust: -60 
+                        position: 'center', color: colors[idx], font: { weight: 'bold', size: isMobile ? 8 : 10 }, yAdjust: -60 
                     };
                     if(rate === 0.10) { porscheDate10 = date; }
                 }
@@ -777,7 +780,7 @@
                     annotations[`house_${idx}`] = {
                         type: 'label', xValue: labels[i], yValue: 10,
                         content: [`${year}`, `${(rate*100).toFixed(1)}%`],
-                        position: 'center', color: colors[idx], font: { weight: 'bold', size: 10 }, yAdjust: -60 
+                        position: 'center', color: colors[idx], font: { weight: 'bold', size: isMobile ? 8 : 10 }, yAdjust: -60 
                     };
                     if(rate === 0.10) { houseDate10 = date; }
                 }
@@ -844,12 +847,16 @@
                 scales: {
                     y: { 
                         title: { display: true, text: 'Net Worth ($ Millions)' },
-                        ticks: { callback: (val) => '$' + val + 'M' }
+                        ticks: { 
+                            callback: (val) => '$' + val + 'M',
+                            font: { size: isMobile ? 8 : 12 } // Mobile Font Fix
+                        }
                     },
                     x: {
                         title: { display: true, text: 'Year', font: {weight:'bold'} }, 
                         ticks: { 
                             maxTicksLimit: 20,
+                            font: { size: isMobile ? 8 : 12 }, // Mobile Font Fix
                             callback: function(val, index) {
                                 const label = this.getLabelForValue(val);
                                 if (label.includes('Jan')) return label.split(' ')[1]; 
@@ -1104,12 +1111,14 @@
             plugins: [ChartDataLabels],
             data: { labels: sortedMonths, datasets: stackedDatasets },
             options: {
-                responsive: true, maintainAspectRatio: false, layout: { padding: { right: 150 } },
+                responsive: true, maintainAspectRatio: false, 
+                layout: { padding: { right: isMobile ? 90 : 150 } }, // Responsive Padding Fix
                 interaction: { mode: 'index', intersect: false },
                 plugins: {
                     datalabels: {
                         align: 'right', anchor: 'end', offset: 5, backgroundColor: 'white', borderColor: (ctx) => ctx.dataset.borderColor,
-                        borderWidth: 1, borderRadius: 4, padding: 6, color: 'black', font: { weight: 'bold', size: 10 },
+                        borderWidth: 1, borderRadius: 4, padding: isMobile ? 4 : 6, color: 'black', 
+                        font: { weight: 'bold', size: isMobile ? 9 : 10 }, // Mobile Font Fix
                         formatter: (val, ctx) => (ctx.dataIndex === ctx.dataset.data.length - 1 && val > 500) ? ctx.dataset.label + '\n' + fmtMoneySimple(val) : null,
                         display: (ctx) => ctx.dataIndex === ctx.dataset.data.length - 1
                     }
