@@ -1,0 +1,1101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Advanced Investment & Income Dashboard</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0"></script>
+    <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-annotation/2.1.0/chartjs-plugin-annotation.min.js"></script>
+    
+    <style>
+        /* FIX: Global Box Sizing */
+        * { box-sizing: border-box; }
+
+        :root {
+            --primary: #2c3e50;
+            --success: #27ae60;
+            --danger: #c0392b;
+            --bg: #ecf0f1;
+            --card-bg: #ffffff;
+            --text: #2c3e50;
+            --accent: #8e44ad; /* Salary section */
+            --goal: #e67e22;   /* Goals section */
+        }
+        body {
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            margin: 0;
+            padding: 20px;
+        }
+        .container { max-width: 1400px; margin: 0 auto; }
+        
+        /* Headers */
+        header {
+            margin-bottom: 30px;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .section-header {
+            margin: 50px 0 20px 0;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #bdc3c7;
+            color: var(--primary);
+            font-size: 1.5em;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        h1 { margin: 0; font-size: 24px; color: var(--primary); }
+        .subtitle { color: #7f8c8d; font-size: 0.9em; margin-top: 5px; }
+        
+        /* Stats Grid */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        .stat-card {
+            background: var(--card-bg);
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            border-left: 4px solid var(--primary);
+        }
+        .stat-card.green { border-left-color: var(--success); }
+        .stat-card.red { border-left-color: var(--danger); }
+        .stat-card.purple { border-left-color: var(--accent); }
+        .stat-card.orange { border-left-color: var(--goal); }
+        
+        .stat-label { font-size: 0.85em; color: #7f8c8d; text-transform: uppercase; letter-spacing: 0.5px; }
+        .stat-value { font-size: 1.8em; font-weight: 700; color: var(--primary); margin-top: 5px; }
+        .stat-sub { font-size: 0.85em; margin-top: 5px; color: #7f8c8d; }
+        .text-green { color: var(--success); }
+        .text-red { color: var(--danger); }
+        .text-purple { color: var(--accent); }
+
+        /* General Layout */
+        .card {
+            background: var(--card-bg);
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            margin-bottom: 20px;
+        }
+        .card h3 { margin-top: 0; margin-bottom: 15px; font-size: 1.1em; color: #34495e; border-bottom: 1px solid #eee; padding-bottom: 10px; }
+        
+        /* Charts */
+        .charts-row {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        @media (max-width: 900px) { .charts-row { grid-template-columns: 1fr; } }
+        
+        .chart-container { position: relative; height: 350px; width: 100%; }
+        .chart-container-tall { height: 400px; }
+
+        /* TradingView Fixes */
+        .tv-card {
+            height: 850px;
+            margin-bottom: 50px;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column; 
+            padding: 0;
+        }
+        .tv-card h3 { padding: 20px; margin: 0; flex-shrink: 0; }
+        .tv-widget-container { flex-grow: 1; width: 100%; height: auto; }
+
+        /* Tables */
+        table { width: 100%; border-collapse: collapse; font-size: 0.9em; }
+        th, td { padding: 12px 15px; text-align: right; border-bottom: 1px solid #eee; }
+        th:first-child, td:first-child { text-align: left; }
+        th { background-color: #f8f9fa; font-weight: 600; color: #7f8c8d; }
+        tr:hover { background-color: #f1f1f1; }
+        
+        .ticker-tag {
+            background: #e8f4f8;
+            color: #2980b9;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 0.85em;
+            font-weight: 600;
+        }
+        .account-name { font-weight: 500; display: block; }
+        .account-sub { font-size: 0.8em; color: #95a5a6; }
+        .sub-text { font-size: 0.75em; color: #999; display: block; margin-top: 2px; }
+        
+        /* Loading Overlay */
+        #loading {
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(255,255,255,0.9);
+            display: flex; justify-content: center; align-items: center;
+            z-index: 1000; font-weight: bold; color: var(--primary);
+        }
+    </style>
+</head>
+<body>
+
+<div id="loading">Loading Dashboard Data...</div>
+
+<div class="container">
+    <header>
+        <div>
+            <h1>Financial Dashboard</h1>
+            <div class="subtitle">Investment Portfolio & Compensation Analysis</div>
+        </div>
+        <div style="text-align: right;">
+            <div style="font-size: 0.9em; font-weight: bold;" id="latest-date-display">-</div>
+        </div>
+    </header>
+
+    <div class="stats-grid">
+        <div class="stat-card">
+            <div class="stat-label">Total Net Worth</div>
+            <div class="stat-value" id="stat-networth">-</div>
+            <div class="stat-sub">Across all accounts</div>
+        </div>
+        <div class="stat-card green">
+            <div class="stat-label">Total Lifetime Gain</div>
+            <div class="stat-value" id="stat-lifetime-gain">-</div>
+            <div class="stat-sub">Cumulative Returns</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Latest Monthly P&L</div>
+            <div class="stat-value" id="stat-monthly-pl">-</div>
+            <div class="stat-sub">Market Change + Income</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Total Inflow (Latest)</div>
+            <div class="stat-value" id="stat-monthly-inflow">-</div>
+            <div class="stat-sub" id="stat-monthly-inflow-sub">-</div>
+        </div>
+    </div>
+
+    <div class="card">
+        <h3>Balance History (Stacked)</h3>
+        <div class="chart-container chart-container-tall">
+            <canvas id="balanceChart"></canvas>
+        </div>
+    </div>
+
+    <div class="card tv-card">
+        <h3>Live Market Watch (Your Positions)</h3>
+        <div class="tv-widget-container" id="tv-widget-container"></div>
+    </div>
+
+    <div class="charts-row">
+        <div class="card">
+            <h3>Current Investment Breakdown (Latest Month)</h3>
+            <div style="overflow-x: auto;">
+                <table id="snapshotTable">
+                    <thead>
+                        <tr>
+                            <th>Account / Investment</th>
+                            <th>Balance</th>
+                            <th>1-Mo Gain (Prev)</th>
+                            <th>1-Mo Inflow (Prev)</th> 
+                            <th>Total Net Dep</th>
+                            <th>Total Return</th>
+                            <th>Rate of Return</th> </tr>
+                    </thead>
+                    <tbody id="snapshotBody"></tbody>
+                </table>
+            </div>
+        </div>
+        <div class="card">
+            <h3>Asset Allocation</h3>
+            <div class="chart-container">
+                <canvas id="allocationChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <h3>Monthly Profit/Loss Analysis (Investments)</h3>
+        <div class="chart-container">
+            <canvas id="plChart"></canvas>
+        </div>
+    </div>
+
+    <div class="card">
+        <h3>Investment History Details</h3>
+        <div style="overflow-x: auto; max-height: 400px;">
+            <table id="historyTable">
+                <thead>
+                    <tr id="historyHeader">
+                        <th>Month</th>
+                        <th>Total Balance</th>
+                        <th>Total Gain/Loss</th>
+                        </tr>
+                </thead>
+                <tbody id="historyBody"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="section-header">
+        Compensation History
+    </div>
+
+    <div class="stats-grid">
+        <div class="stat-card purple">
+            <div class="stat-label">Latest Base Salary</div>
+            <div class="stat-value" id="stat-salary-base">-</div>
+            <div class="stat-sub" id="stat-salary-date">As of -</div>
+        </div>
+        <div class="stat-card purple">
+            <div class="stat-label">Proj. Total Comp (2025)</div>
+            <div class="stat-value" id="stat-total-comp">-</div>
+            <div class="stat-sub">Base + Match + Bonus + Edu</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Education Benefits (YTD)</div>
+            <div class="stat-value" id="stat-edu-ytd">-</div>
+            <div class="stat-sub">Tuition Reimbursement</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Match Rate</div>
+            <div class="stat-value" id="stat-match-rate">-</div>
+            <div class="stat-sub">Of Base Salary</div>
+        </div>
+    </div>
+
+    <div class="charts-row">
+        <div class="card">
+            <h3>Salary vs. Total Compensation Trends (Stacked)</h3>
+            <div class="chart-container">
+                <canvas id="salaryTrendChart"></canvas>
+            </div>
+        </div>
+        <div class="card">
+            <h3>Compensation Components (Latest YTD)</h3>
+            <div class="chart-container">
+                <canvas id="compBreakdownChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <h3>Compensation History Details</h3>
+        <div style="overflow-x: auto; max-height: 400px;">
+            <table id="salaryTable">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Base Salary</th>
+                        <th>Match</th>
+                        <th>Bonus</th>
+                        <th>Education</th>
+                        <th>Total Comp</th>
+                    </tr>
+                </thead>
+                <tbody id="salaryBody"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="section-header">
+        +25 Year Extrapolation
+    </div>
+
+    <div class="stats-grid">
+         <div class="stat-card orange">
+            <div class="stat-label">Projected Net Worth (10%)</div>
+            <div class="stat-value" id="proj-nw-10pct">-</div>
+            <div class="stat-sub">In 25 Years</div>
+        </div>
+        <div class="stat-card orange">
+            <div class="stat-label">Porsche Purchase</div>
+            <div style="font-size:0.9em; font-weight:bold; margin-top:4px; color:#2c3e50;">$3M Goal</div>
+            <div style="font-size:0.9em; font-weight:bold; color:#c0392b;">$300k Cost</div>
+            <div class="stat-value" id="proj-porsche-date">-</div>
+            <div class="stat-sub" id="proj-porsche-countdown" style="font-weight:bold; color:var(--primary); font-size:0.9em; margin-bottom:2px">-</div>
+            <div class="stat-sub">Estimated Date (10% Rtn)</div>
+        </div>
+         <div class="stat-card orange">
+            <div class="stat-label">Beach House</div>
+            <div style="font-size:0.9em; font-weight:bold; margin-top:4px; color:#2c3e50;">$10M Goal</div>
+            <div style="font-size:0.9em; font-weight:bold; color:#c0392b;">$5M Cost</div>
+            <div class="stat-value" id="proj-house-date">-</div>
+            <div class="stat-sub" id="proj-house-countdown" style="font-weight:bold; color:var(--primary); font-size:0.9em; margin-bottom:2px">-</div>
+            <div class="stat-sub">Estimated Date (10% Rtn)</div>
+        </div>
+    </div>
+
+    <div class="card">
+        <h3>Net Worth Projection (Range: 5% - 15% Annual Return)</h3>
+        <div style="text-align: center; font-size: 0.85em; color: #7f8c8d; margin-bottom: 10px;">
+            Baseline: Current Net Worth + Previous Month Inflow (Growing 6% each Jan, 3% each July)
+        </div>
+        <div class="chart-container chart-container-tall">
+            <canvas id="projectionChart"></canvas>
+        </div>
+    </div>
+
+    <div class="card">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; border-bottom:1px solid #eee; padding-bottom:10px;">
+            <h3 style="margin:0; border:none; padding:0;">Detailed Projection Breakdown</h3>
+            <select id="projectionRateSelect" onchange="updateProjectionTable()" style="padding:5px; border-radius:4px; border:1px solid #ddd; font-weight:bold; color:var(--primary);">
+                <option value="0.05">5% Return (Conservative)</option>
+                <option value="0.075">7.5% Return</option>
+                <option value="0.1" selected>10% Return (Baseline)</option>
+                <option value="0.125">12.5% Return</option>
+                <option value="0.15">15% Return (Aggressive)</option>
+            </select>
+        </div>
+        
+        <div style="background:#f8f9fa; padding:15px; border-radius:6px; margin-bottom:20px; font-size:0.9em; line-height:1.6; color:#555;">
+            <strong>The Math Behind the Numbers:</strong><br>
+            Future values are calculated monthly using the formula: 
+            <code style="background:#eee; padding:2px 4px; border-radius:3px; color:#c0392b; font-family:monospace;">Balance(t) = Balance(t-1) × (1 + AnnualRate/12) + MonthlyInflow(t)</code>.<br>
+            <strong>Contribution Assumptions:</strong>
+            The "Monthly Inflow" (your investment contributions) automatically increases by <strong>6% every January</strong> (simulating raises/bonus) and <strong>3% every July</strong> (simulating mid-year adjustments).
+        </div>
+    
+        <div style="overflow-x: auto; max-height: 500px;">
+            <table id="projectionTable">
+                <thead>
+                    <tr>
+                        <th style="width:10%">Year</th>
+                        <th style="width:20%">Start Balance</th>
+                        <th style="width:25%">Annual Contribution</th>
+                        <th style="width:25%">Est. Market Growth</th>
+                        <th style="width:20%">End Balance</th>
+                    </tr>
+                </thead>
+                <tbody id="projectionTableBody"></tbody>
+            </table>
+        </div>
+    </div>
+
+</div>
+
+<script>
+    // ==========================================
+    // DATA SOURCES
+    // ==========================================
+    
+    // 2. GOOGLE SHEETS API
+    const API_URL = 'https://script.google.com/macros/s/AKfycbxEzEutSYlhftlhNq_EI-dJRwARlcB00enAAm_9pkDxX5m8mhdtr8OsRx1rzneN4gXy/exec';
+
+    // GLOBAL STORE FOR PROJECTION DATA (Calculated once, displayed dynamically)
+    let projectionDataStore = {};
+
+    // ==========================================
+    // UTILITIES
+    // ==========================================
+    function cleanMoney(str) {
+        if (!str) return 0;
+        const s = String(str).replace(/[$,"]/g, '').trim();
+        return parseFloat(s) || 0;
+    }
+
+    function cleanPercent(str) {
+        if (!str) return 0;
+        const s = String(str).replace(/[%"]/g, '').trim();
+        return parseFloat(s) || 0;
+    }
+
+    function fmtMoney(num) {
+        return '$' + num.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
+    }
+
+    function fmtMoneySimple(num) {
+        return '$' + num.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0});
+    }
+
+    function formatCountdown(targetDate) {
+        if (!targetDate) return "N/A";
+        const now = new Date();
+        if (targetDate <= now) return "Achieved!";
+        
+        let years = targetDate.getFullYear() - now.getFullYear();
+        let months = targetDate.getMonth() - now.getMonth();
+        
+        if (months < 0) {
+            years--;
+            months += 12;
+        }
+        return `${years} Years, ${months} Months remaining`;
+    }
+
+    // ==========================================
+    // LOGIC: SALARY
+    // ==========================================
+    function processSalaryData(rows) {
+        if (!rows || rows.length < 2) {
+            document.getElementById('stat-salary-base').innerText = "No Data";
+            return;
+        }
+
+        const data = rows.slice(1).map(r => ({
+            year: r[0], date: r[1],
+            salary: cleanMoney(r[2]), matchPct: cleanPercent(r[3]), matchAmt: cleanMoney(r[4]),
+            bonus: cleanMoney(r[5]), ytdBonus: cleanMoney(r[6]),
+            edu: cleanMoney(r[7]), ytdEdu: cleanMoney(r[8]),
+            recurring: cleanMoney(r[9]), totalComp: cleanMoney(r[11])
+        }));
+
+        data.sort((a,b) => new Date(a.date) - new Date(b.date));
+        if (data.length === 0) return;
+        const latest = data[data.length - 1];
+        
+        document.getElementById('stat-salary-base').innerText = fmtMoney(latest.salary);
+        document.getElementById('stat-salary-date').innerText = "Effective: " + latest.date;
+        document.getElementById('stat-total-comp').innerText = fmtMoney(latest.totalComp);
+        document.getElementById('stat-edu-ytd').innerText = fmtMoney(latest.ytdEdu || 0);
+        document.getElementById('stat-match-rate').innerText = latest.matchPct + "%";
+
+        const tbody = document.getElementById('salaryBody');
+        tbody.innerHTML = '';
+        [...data].reverse().forEach(row => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td style="white-space:nowrap">${row.date}</td>
+                <td style="font-weight:bold">${fmtMoney(row.salary)}</td>
+                <td>${fmtMoney(row.matchAmt)} <span class="sub-text">(${row.matchPct}%)</span></td>
+                <td>${row.ytdBonus > 0 ? fmtMoney(row.ytdBonus) : '-'} <span class="sub-text">(YTD)</span></td>
+                <td>${row.ytdEdu > 0 ? fmtMoney(row.ytdEdu) : '-'} <span class="sub-text">(YTD)</span></td>
+                <td style="font-weight:bold; color:var(--accent)">${fmtMoney(row.totalComp)}</td>
+            `;
+            tbody.appendChild(tr);
+        });
+
+        const labels = data.map(d => {
+            const dt = new Date(d.date);
+            return dt.toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
+        });
+
+        new Chart(document.getElementById('salaryTrendChart'), {
+            type: 'bar',
+            plugins: [ChartDataLabels],
+            data: {
+                labels: labels,
+                datasets: [
+                    { label: 'Base Salary', data: data.map(d => d.salary), backgroundColor: '#2c3e50', stack: 'Stack 0' },
+                    { label: 'Company Match', data: data.map(d => d.matchAmt), backgroundColor: '#27ae60', stack: 'Stack 0' },
+                    { label: 'Education (YTD)', data: data.map(d => d.ytdEdu), backgroundColor: '#e67e22', stack: 'Stack 0' },
+                    { label: 'Bonus (YTD)', data: data.map(d => d.ytdBonus), backgroundColor: '#f1c40f', stack: 'Stack 0' }
+                ]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                plugins: {
+                    legend: { position: 'top' },
+                    datalabels: {
+                        color: (ctx) => ctx.dataset.backgroundColor === '#f1c40f' ? '#000' : '#fff',
+                        font: { weight: 'bold', size: 10 },
+                        formatter: (val) => val > 500 ? fmtMoneySimple(val) : ''
+                    }
+                },
+                scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true } }
+            }
+        });
+
+        new Chart(document.getElementById('compBreakdownChart'), {
+            type: 'doughnut',
+            plugins: [ChartDataLabels],
+            data: {
+                labels: ['Base Salary', 'Match', 'Education (YTD)', 'Bonus (YTD)'],
+                datasets: [{
+                    data: [latest.salary, latest.matchAmt, latest.ytdEdu, latest.ytdBonus],
+                    backgroundColor: ['#2c3e50', '#27ae60', '#e67e22', '#f1c40f']
+                }]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                plugins: {
+                    legend: { position: 'right' },
+                    datalabels: {
+                        color: '#fff', font: { weight: 'bold' }, textAlign: 'center',
+                        formatter: (val, ctx) => {
+                            let sum = ctx.dataset.data.reduce((a, b) => a + b, 0);
+                            let pct = ((val*100) / sum).toFixed(1) + "%";
+                            return val > 0 ? fmtMoneySimple(val) + '\n(' + pct + ')' : '';
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    // ==========================================
+    // LOGIC: PROJECTION TABLE RENDERER
+    // ==========================================
+    function updateProjectionTable() {
+        const rate = parseFloat(document.getElementById('projectionRateSelect').value);
+        const data = projectionDataStore[rate];
+        const tbody = document.getElementById('projectionTableBody');
+        tbody.innerHTML = '';
+
+        if (!data) return;
+
+        data.forEach(row => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td style="font-weight:bold">${row.year}</td>
+                <td style="color:#7f8c8d">${fmtMoney(row.startBal)}</td>
+                <td style="color:#2980b9; font-weight:500;">
+                    ${fmtMoney(row.annualContrib)}
+                </td>
+                <td style="color:#27ae60;">
+                    +${fmtMoney(row.annualGrowth)}
+                </td>
+                <td style="font-weight:bold; color:#2c3e50; background:#f1f2f6;">
+                    ${fmtMoney(row.endBal)}
+                </td>
+            `;
+            tbody.appendChild(tr);
+        });
+    }
+
+    // ==========================================
+    // LOGIC: PROJECTION CHART & CALCULATION
+    // ==========================================
+    function renderProjectionChart(startBalance, startInflow, startDateStr) {
+        const rates = [0.05, 0.075, 0.10, 0.125, 0.15];
+        
+        // Reset Store
+        projectionDataStore = {};
+
+        // DYNAMIC END YEAR: Current + 25 Years
+        const currentYear = new Date().getFullYear();
+        const endYear = currentYear + 25;
+        
+        const parts = startDateStr.split('-');
+        let currentDate = new Date(parseInt(parts[0]), parseInt(parts[1])-1, 1);
+        
+        const labels = [];
+        const timeline = [];
+        
+        let tempDate = new Date(currentDate);
+        while (tempDate.getFullYear() < endYear || (tempDate.getFullYear() === endYear && tempDate.getMonth() <= 11)) {
+            timeline.push(new Date(tempDate));
+            labels.push(tempDate.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }));
+            tempDate.setMonth(tempDate.getMonth() + 1);
+        }
+
+        const datasets = [];
+        const colors = ['#B03A2E', '#CA6F1E', '#D4AC0D', '#229954', '#2471A3']; 
+
+        const annotations = {
+            porscheLine: {
+                type: 'line', yMin: 3, yMax: 3, borderColor: '#F39C12', borderWidth: 4, borderDash: [6, 4],
+                label: { 
+                    display: true, content: 'Porsche 911 (-$300k)', position: 'start', 
+                    backgroundColor: 'rgba(243, 156, 18, 0.9)', color: 'white',
+                    font: { size: 12, weight: 'bold' }, yAdjust: -20, xAdjust: 10 
+                }
+            },
+            houseLine: {
+                type: 'line', yMin: 10, yMax: 10, borderColor: '#16A085', borderWidth: 4, borderDash: [6, 4],
+                label: { 
+                    display: true, content: 'Beach House (-$5M)', position: 'start', 
+                    backgroundColor: 'rgba(22, 160, 133, 0.9)', color: 'white',
+                    font: { size: 12, weight: 'bold' }, yAdjust: -20, xAdjust: 10 
+                }
+            }
+        };
+
+        let porscheDate10 = null;
+        let houseDate10 = null;
+        let finalBalance10 = 0;
+        let totalNW10 = 0;
+
+        rates.forEach((rate, idx) => {
+            let balance = startBalance;
+            let monthlyContrib = startInflow;
+            let porscheBought = false;
+            let houseBought = false;
+            
+            // Stats Tracking for Table
+            let currentYearStats = { 
+                year: timeline[0].getFullYear(), 
+                startBal: balance, 
+                annualContrib: 0, 
+                annualGrowth: 0 
+            };
+            let yearlyData = [];
+
+            const dataPoints = timeline.map((date, i) => {
+                const year = date.getFullYear();
+
+                // Detect New Year for Table Aggregation
+                if (year !== currentYearStats.year) {
+                    currentYearStats.endBal = balance;
+                    // Fix growth calc: End - Start - Contrib
+                    currentYearStats.annualGrowth = currentYearStats.endBal - currentYearStats.startBal - currentYearStats.annualContrib;
+                    yearlyData.push({ ...currentYearStats });
+                    
+                    // Reset for next year
+                    currentYearStats = { 
+                        year: year, 
+                        startBal: balance, 
+                        annualContrib: 0, 
+                        annualGrowth: 0 
+                    };
+                }
+
+                // 1. Contributions Rules (Compounding)
+                if (i > 0) { 
+                    if (date.getMonth() === 0) { monthlyContrib *= 1.06; } // Jan
+                    if (date.getMonth() === 6) { monthlyContrib *= 1.03; } // July
+                }
+
+                // 2. Growth
+                const growth = balance * (rate / 12);
+                balance += growth;
+                
+                // 3. Add Contrib
+                balance += monthlyContrib;
+
+                // Track Yearly Stats
+                currentYearStats.annualContrib += monthlyContrib;
+
+                // 4. Milestones
+                if (balance >= 3000000 && !porscheBought) {
+                    balance -= 300000;
+                    porscheBought = true;
+                    // Add Label
+                    annotations[`porsche_${idx}`] = {
+                        type: 'label', xValue: labels[i], yValue: 3,
+                        content: [`${year}`, `${(rate*100).toFixed(1)}%`],
+                        position: 'center', color: colors[idx], font: { weight: 'bold', size: 10 }, yAdjust: -60 
+                    };
+                    if(rate === 0.10) { porscheDate10 = date; }
+                }
+
+                if (balance >= 10000000 && !houseBought) {
+                    balance -= 5000000;
+                    houseBought = true;
+                    // Add Label
+                    annotations[`house_${idx}`] = {
+                        type: 'label', xValue: labels[i], yValue: 10,
+                        content: [`${year}`, `${(rate*100).toFixed(1)}%`],
+                        position: 'center', color: colors[idx], font: { weight: 'bold', size: 10 }, yAdjust: -60 
+                    };
+                    if(rate === 0.10) { houseDate10 = date; }
+                }
+                
+                return balance / 1000000; 
+            });
+
+            // Push final partial year
+            currentYearStats.endBal = balance;
+            currentYearStats.annualGrowth = currentYearStats.endBal - currentYearStats.startBal - currentYearStats.annualContrib;
+            yearlyData.push({ ...currentYearStats });
+            
+            // Save to Global Store
+            projectionDataStore[rate] = yearlyData;
+
+            if (rate === 0.10) {
+                finalBalance10 = balance;
+                // Calculate Total NW (Liquid + Assets)
+                let assetValue = 0;
+                if (porscheBought) assetValue += 300000;
+                if (houseBought) assetValue += 5000000;
+                totalNW10 = finalBalance10 + assetValue;
+            }
+
+            datasets.push({
+                label: (rate * 100).toFixed(1) + '%',
+                data: dataPoints,
+                borderColor: colors[idx],
+                backgroundColor: colors[idx],
+                borderWidth: 2,
+                pointRadius: 0,
+                tension: 0.4
+            });
+        });
+
+        // Initial Render of Table (Default 10%)
+        updateProjectionTable();
+
+        // Update Stats Grid - REPLACING INNER HTML TO SHOW TWO VALUES
+        document.getElementById('proj-nw-10pct').innerHTML = 
+            `<div>${fmtMoneySimple(finalBalance10)} <span style="font-size:0.6em; color:#7f8c8d">Liquid</span></div>` +
+            `<div style="font-size:0.8em; margin-top:4px; color:#2c3e50">${fmtMoneySimple(totalNW10)} <span style="font-size:0.8em; color:#7f8c8d">Total</span></div>`;
+
+        
+        const pMonthYear = porscheDate10 ? porscheDate10.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) : "Not Reached";
+        const hMonthYear = houseDate10 ? houseDate10.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) : "Not Reached";
+
+        document.getElementById('proj-porsche-date').innerText = pMonthYear;
+        document.getElementById('proj-house-date').innerText = hMonthYear;
+        document.getElementById('proj-porsche-countdown').innerText = formatCountdown(porscheDate10);
+        document.getElementById('proj-house-countdown').innerText = formatCountdown(houseDate10);
+
+        new Chart(document.getElementById('projectionChart'), {
+            type: 'line',
+            data: { labels: labels, datasets: datasets },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                interaction: { mode: 'index', intersect: false },
+                plugins: {
+                    legend: { display: true, position: 'top' },
+                    tooltip: { callbacks: { label: (ctx) => ctx.dataset.label + ': $' + ctx.raw.toFixed(2) + 'M' } },
+                    annotation: { annotations: annotations }
+                },
+                scales: {
+                    y: { 
+                        title: { display: true, text: 'Net Worth ($ Millions)' },
+                        ticks: { callback: (val) => '$' + val + 'M' }
+                    },
+                    x: {
+                        title: { display: true, text: 'Year', font: {weight:'bold'} }, 
+                        ticks: { 
+                            maxTicksLimit: 20,
+                            callback: function(val, index) {
+                                const label = this.getLabelForValue(val);
+                                if (label.includes('Jan')) return label.split(' ')[1]; 
+                                return null;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    // ==========================================
+    // LOGIC: INVESTMENTS (Existing)
+    // ==========================================
+    function parseSheetData(rows) {
+        if (!rows) return [];
+        const data = [];
+        for (let i = 1; i < rows.length; i++) {
+            const cols = rows[i];
+            if (cols.length > 8) {
+                const dateStr = cols[0];
+                const deposits = cleanMoney(cols[2]);
+                const withdrawals = cleanMoney(cols[3]);
+                const marketGain = cleanMoney(cols[4]);
+                const income = cleanMoney(cols[5]);
+                const cumulative = cleanMoney(cols[7]);
+                const balance = cleanMoney(cols[8]);
+                const invested = cols[9] ? cols[9].trim() : "Unknown";
+
+                const dateParts = dateStr.split('/');
+                if(dateParts.length < 2) continue;
+                
+                let month = dateParts[0].padStart(2, '0');
+                let year = dateParts[2];
+                
+                const netTransfers = deposits + withdrawals;
+
+                data.push({
+                    key: `${year}-${month}`,
+                    dateObj: new Date(year, month - 1, 1),
+                    deposits: netTransfers,
+                    marketGain: marketGain,
+                    income: income,
+                    cumulative: cumulative,
+                    balance: balance,
+                    invested: invested
+                });
+            }
+        }
+        return data;
+    }
+
+    async function initDashboard() {
+        try {
+            const response = await fetch(API_URL);
+            const rawData = await response.json();
+
+            // 1. Salary
+            if (rawData.salary) {
+                processSalaryData(rawData.salary);
+            } else {
+                document.getElementById('stat-salary-base').innerText = "Missing Tab";
+            }
+
+            // 2. Investments
+            const accounts = [
+                { id: 'wellsFargo', name: 'Wells Fargo (Cash)', data: parseSheetData(rawData.wellsFargo) },
+                { id: 'fidelity', name: 'Fidelity (GOOGL)', data: parseSheetData(rawData.fidelity) },
+                { id: 'boeing', name: 'Boeing (Bonds)', data: parseSheetData(rawData.boeing) },
+                { id: 'vanguardA', name: 'Vanguard Plan A (VIGIX)', data: parseSheetData(rawData.vanguardA) },
+                { id: 'vanguardB', name: 'Vanguard Plan B (VIGIX)', data: parseSheetData(rawData.vanguardB) },
+                { id: 'vanguardUTMA', name: 'Vanguard UTMA (VTSAX)', data: parseSheetData(rawData.vanguardUTMA) }
+            ];
+
+            processAndRender(accounts);
+            document.getElementById('loading').style.display = 'none';
+
+        } catch (error) {
+            console.error(error);
+            document.getElementById('loading').innerHTML = "Error loading data.<br>" + error.message;
+        }
+    }
+
+    function processAndRender(accounts) {
+        const allMonths = new Set();
+        accounts.forEach(acc => acc.data.forEach(d => allMonths.add(d.key)));
+        const sortedMonths = Array.from(allMonths).sort();
+        
+        const alignedData = {};
+        const globalTotals = {
+            balance: [], gainLoss: [], income: [], deposits: [], cumulative: []
+        };
+        
+        accounts.forEach(acc => alignedData[acc.id] = []);
+
+        sortedMonths.forEach(monthKey => {
+            let monthBalance = 0;
+            let monthGain = 0;
+            let monthIncome = 0;
+            let monthDeposits = 0;
+            let monthCumulative = 0;
+
+            accounts.forEach(acc => {
+                const entry = acc.data.find(d => d.key === monthKey);
+                if (entry) {
+                    alignedData[acc.id].push(entry);
+                    monthBalance += entry.balance;
+                    monthGain += entry.marketGain + entry.income; 
+                    monthIncome += entry.income;
+                    monthDeposits += entry.deposits;
+                    monthCumulative += entry.cumulative;
+                } else {
+                    alignedData[acc.id].push({ balance: 0, marketGain: 0, income: 0, deposits: 0, cumulative: 0, invested: '-' });
+                }
+            });
+
+            globalTotals.balance.push(monthBalance);
+            globalTotals.gainLoss.push(monthGain);
+            globalTotals.income.push(monthIncome);
+            globalTotals.deposits.push(monthDeposits);
+            globalTotals.cumulative.push(monthCumulative);
+        });
+
+        const lastIndex = sortedMonths.length - 1;
+        document.getElementById('latest-date-display').innerText = "Data as of " + sortedMonths[lastIndex];
+        document.getElementById('stat-networth').innerText = fmtMoney(globalTotals.balance[lastIndex]);
+        
+        const totalGain = globalTotals.cumulative[lastIndex];
+        const gainEl = document.getElementById('stat-lifetime-gain');
+        gainEl.innerText = (totalGain >= 0 ? '+' : '') + fmtMoney(totalGain);
+        gainEl.classList.add(totalGain >= 0 ? 'text-green' : 'text-red');
+
+        const monthlyPL = globalTotals.gainLoss[lastIndex];
+        const plEl = document.getElementById('stat-monthly-pl');
+        plEl.innerText = (monthlyPL >= 0 ? '+' : '') + fmtMoney(monthlyPL);
+        plEl.classList.add(monthlyPL >= 0 ? 'text-green' : 'text-red');
+
+        const lastIncome = globalTotals.income[lastIndex];
+        const lastDeposits = globalTotals.deposits[lastIndex];
+        const totalInflow = lastIncome + lastDeposits;
+        
+        document.getElementById('stat-monthly-inflow').innerText = fmtMoney(totalInflow);
+        document.getElementById('stat-monthly-inflow-sub').innerHTML = `Income: ${fmtMoney(lastIncome)} <span style="margin:0 4px; color:#ccc">|</span> Net Dep: ${fmtMoney(lastDeposits)}`;
+
+        // --- TRIGGER PROJECTION HERE (UPDATED) ---
+        // Logic: Use Previous Month's Inflow (if available) as baseline for projection
+        let projectionInflow = totalInflow; // Default fallback
+        if (lastIndex > 0) {
+            projectionInflow = globalTotals.income[lastIndex - 1] + globalTotals.deposits[lastIndex - 1];
+        }
+        renderProjectionChart(globalTotals.balance[lastIndex], projectionInflow, sortedMonths[lastIndex]);
+
+        const snapshotBody = document.getElementById('snapshotBody');
+        snapshotBody.innerHTML = '';
+        accounts.forEach(acc => {
+            const latest = alignedData[acc.id][lastIndex];
+            
+            // Get previous month data for the breakdown columns
+            const prevIndex = lastIndex - 1;
+            const prev = (prevIndex >= 0) ? alignedData[acc.id][prevIndex] : null;
+
+            // FILTER: Skip if balance is effectively zero
+            if (latest.balance < 0.01) return;
+
+            // Calculate Previous Month Metrics
+            let prevGain = 0;
+            let prevInflow = 0;
+            let prevIncome = 0;
+            let prevNetDep = 0;
+
+            if (prev) {
+                prevGain = prev.marketGain + prev.income;
+                prevIncome = prev.income;
+                prevNetDep = prev.deposits;
+                prevInflow = prevIncome + prevNetDep;
+            }
+
+            const tr = document.createElement('tr');
+            
+            // For Total Return & ROI, we still use latest cumulative
+            const totalNetDep = latest.balance - latest.cumulative;
+            let roiPct = 0;
+            if (totalNetDep !== 0) { roiPct = (latest.cumulative / totalNetDep) * 100; }
+            const roiColor = roiPct >= 0 ? 'text-green' : 'text-red';
+            const roiText = (roiPct >= 0 ? '+' : '') + roiPct.toFixed(1) + '%';
+
+            tr.innerHTML = `
+                <td>
+                    <span class="account-name">${acc.name}</span>
+                    <span class="ticker-tag">${latest.invested}</span>
+                </td>
+                <td style="font-weight:bold">${fmtMoney(latest.balance)}</td>
+                <td class="${prevGain >= 0 ? 'text-green' : 'text-red'}">
+                    ${prevGain >= 0 ? '+' : ''}${fmtMoney(prevGain)}
+                </td>
+                <td>
+                    ${fmtMoney(prevInflow)}
+                    <span class="sub-text">(${fmtMoneySimple(prevIncome)} Inc + ${fmtMoneySimple(prevNetDep)} Net Dep)</span>
+                </td>
+                <td>${fmtMoney(totalNetDep)}</td>
+                <td style="font-weight:bold" class="${latest.cumulative >= 0 ? 'text-green' : 'text-red'}">
+                    ${fmtMoney(latest.cumulative)}
+                </td>
+                <td style="font-weight:bold" class="${roiColor}">${roiText}</td>
+            `;
+            snapshotBody.appendChild(tr);
+        });
+
+        // Charts
+        const allocation = {};
+        accounts.forEach(acc => {
+            const latest = alignedData[acc.id][lastIndex];
+            if (latest.balance > 0) {
+                const ticker = latest.invested;
+                allocation[ticker] = (allocation[ticker] || 0) + latest.balance;
+            }
+        });
+        const allocLabels = Object.keys(allocation);
+        const allocValues = Object.values(allocation);
+        const totalPortfolio = allocValues.reduce((a, b) => a + b, 0);
+        const palette = ['#3498db', '#9b59b6', '#2ecc71', '#e67e22', '#f1c40f', '#e74c3c'];
+
+        new Chart(document.getElementById('allocationChart'), {
+            type: 'doughnut',
+            plugins: [ChartDataLabels],
+            data: { labels: allocLabels, datasets: [{ data: allocValues, backgroundColor: palette }] },
+            options: {
+                maintainAspectRatio: false, layout: { padding: 80 },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: { callbacks: { label: (ctx) => ctx.label + ': ' + fmtMoney(ctx.raw) + ' (' + ((ctx.raw/totalPortfolio)*100).toFixed(1) + '%)' } },
+                    datalabels: {
+                        color: '#2c3e50', anchor: 'end', align: 'end', offset: 10,
+                        formatter: (val, ctx) => (val/totalPortfolio > 0.01) ? ctx.chart.data.labels[ctx.dataIndex] + '\n' + fmtMoneySimple(val) : ''
+                    }
+                }
+            }
+        });
+
+        const stackedDatasets = accounts.map((acc, index) => {
+            const color = palette[index % palette.length];
+            return {
+                label: acc.name,
+                data: alignedData[acc.id].map(d => d.balance),
+                backgroundColor: color + '88', borderColor: color, borderWidth: 1, fill: true, tension: 0.2
+            };
+        });
+
+        new Chart(document.getElementById('balanceChart'), {
+            type: 'line',
+            plugins: [ChartDataLabels],
+            data: { labels: sortedMonths, datasets: stackedDatasets },
+            options: {
+                responsive: true, maintainAspectRatio: false, layout: { padding: { right: 150 } },
+                interaction: { mode: 'index', intersect: false },
+                plugins: {
+                    datalabels: {
+                        align: 'right', anchor: 'end', offset: 5, backgroundColor: 'white', borderColor: (ctx) => ctx.dataset.borderColor,
+                        borderWidth: 1, borderRadius: 4, padding: 6, color: 'black', font: { weight: 'bold', size: 10 },
+                        formatter: (val, ctx) => (ctx.dataIndex === ctx.dataset.data.length - 1 && val > 500) ? ctx.dataset.label + '\n' + fmtMoneySimple(val) : null,
+                        display: (ctx) => ctx.dataIndex === ctx.dataset.data.length - 1
+                    }
+                },
+                scales: { y: { beginAtZero: true, stacked: true } }
+            }
+        });
+
+        new Chart(document.getElementById('plChart'), {
+            type: 'bar',
+            data: {
+                labels: sortedMonths,
+                datasets: [{ label: 'Monthly Net Gain/Loss', data: globalTotals.gainLoss, backgroundColor: globalTotals.gainLoss.map(v => v >= 0 ? '#27ae60' : '#c0392b') }]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                plugins: { legend: { display: false } }, // Legend Hidden
+                scales: { y: { grid: { color: '#f0f0f0' } }, x: { grid: { display: false } } }
+            }
+        });
+
+        const historyHeader = document.getElementById('historyHeader');
+        historyHeader.innerHTML = '<th>Month</th><th>Total Balance</th><th>Total Gain/Loss</th>';
+        accounts.forEach(acc => {
+            const th = document.createElement('th');
+            th.innerText = acc.name.split(' ')[0]; 
+            th.style.fontSize = "0.8em";
+            historyHeader.appendChild(th);
+        });
+
+        const historyBody = document.getElementById('historyBody');
+        historyBody.innerHTML = '';
+        for (let i = sortedMonths.length - 1; i >= 0; i--) {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td>${sortedMonths[i]}</td>
+                <td style="font-weight:bold">${fmtMoney(globalTotals.balance[i])}</td>
+                <td class="${globalTotals.gainLoss[i] >= 0 ? 'text-green' : 'text-red'}">
+                    ${globalTotals.gainLoss[i] >= 0 ? '+' : ''}${fmtMoney(globalTotals.gainLoss[i])}
+                </td>
+            `;
+            accounts.forEach(acc => {
+                const val = alignedData[acc.id][i].balance;
+                const td = document.createElement('td');
+                td.innerText = val ? fmtMoney(val) : '-';
+                td.style.fontSize = "0.85em";
+                tr.appendChild(td);
+            });
+            historyBody.appendChild(tr);
+        }
+    }
+
+    // --- TRADINGVIEW WIDGET ---
+    new TradingView.widget({
+        "container_id": "tv-widget-container",
+        "autosize": true,
+        "symbol": "NASDAQ:GOOGL",
+        "interval": "D",
+        "timezone": "America/New_York",
+        "theme": "light",
+        "style": "1",
+        "locale": "en",
+        "toolbar_bg": "#f1f3f6",
+        "enable_publishing": false,
+        "allow_symbol_change": true,
+        "save_image": false,
+        "details": true,
+        "hotlist": false,
+        "calendar": false,
+        "watchlist": [
+            "NASDAQ:GOOGL",
+            "NASDAQ:VIGIX",
+            "NASDAQ:VTSAX",
+            "NASDAQ:BND", // Boeing Bonds
+            "AMEX:BIL"    // Wells Fargo Cash Proxy
+        ]
+    });
+
+    initDashboard();
+
+</script>
+</body>
+</html>
