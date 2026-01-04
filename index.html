@@ -115,7 +115,9 @@
         }
         
         .chart-container { position: relative; height: 350px; width: 100%; }
-        .chart-container-tall { height: 400px; }
+        
+        /* UPDATED: Height increased to 480px (20% taller than 400px) */
+        .chart-container-tall { height: 480px; }
 
         /* TradingView Fixes */
         .tv-card {
@@ -208,7 +210,7 @@
 
             /* 3. CHARTS: TALLER FOR STACKED DATA */
             .chart-container { height: 250px !important; }
-            /* INCREASED HEIGHT FOR BALANCE HISTORY */
+            /* INCREASED HEIGHT FOR BALANCE HISTORY MOBILE */
             .chart-container-tall { height: 550px !important; }
 
             /* 4. TABLES: COMPACT & SCROLLABLE */
@@ -1010,6 +1012,18 @@
         }
         renderProjectionChart(globalTotals.balance[lastIndex], projectionInflow, sortedMonths[lastIndex]);
 
+        // === FIX: DEFINE PALETTE & STACKED DATASETS HERE (EARLY) ===
+        const palette = ['#3498db', '#9b59b6', '#2ecc71', '#e67e22', '#f1c40f', '#e74c3c'];
+        
+        const stackedDatasets = accounts.map((acc, index) => {
+            const color = palette[index % palette.length];
+            return {
+                label: acc.name,
+                data: alignedData[acc.id].map(d => d.balance),
+                backgroundColor: color + '88', borderColor: color, borderWidth: 1, fill: true, tension: 0.2
+            };
+        });
+        
         const snapshotBody = document.getElementById('snapshotBody');
         snapshotBody.innerHTML = '';
         accounts.forEach(acc => {
@@ -1078,7 +1092,6 @@
         const allocLabels = Object.keys(allocation);
         const allocValues = Object.values(allocation);
         const totalPortfolio = allocValues.reduce((a, b) => a + b, 0);
-        const palette = ['#3498db', '#9b59b6', '#2ecc71', '#e67e22', '#f1c40f', '#e74c3c'];
 
         new Chart(document.getElementById('allocationChart'), {
             type: 'doughnut',
@@ -1095,15 +1108,6 @@
                     }
                 }
             }
-        });
-
-        const stackedDatasets = accounts.map((acc, index) => {
-            const color = palette[index % palette.length];
-            return {
-                label: acc.name,
-                data: alignedData[acc.id].map(d => d.balance),
-                backgroundColor: color + '88', borderColor: color, borderWidth: 1, fill: true, tension: 0.2
-            };
         });
 
         new Chart(document.getElementById('balanceChart'), {
