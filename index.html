@@ -592,7 +592,7 @@
                     legend: { position: 'top' },
                     datalabels: {
                         color: (ctx) => ctx.dataset.backgroundColor === '#f1c40f' ? '#000' : '#fff',
-                        font: { weight: 'bold', size: isMobile ? 8 : 10 }, // Mobile Font Fix
+                        font: { weight: 'bold', size: isMobile ? 7 : 10 }, // Mobile Font Fix (Even Smaller)
                         formatter: (val) => val > 500 ? fmtMoneySimple(val) : ''
                     }
                 },
@@ -768,7 +768,7 @@
                     annotations[`porsche_${idx}`] = {
                         type: 'label', xValue: labels[i], yValue: 3,
                         content: [`${year}`, `${(rate*100).toFixed(1)}%`],
-                        position: 'center', color: colors[idx], font: { weight: 'bold', size: isMobile ? 8 : 10 }, yAdjust: -60 
+                        position: 'center', color: colors[idx], font: { weight: 'bold', size: isMobile ? 7 : 10 }, yAdjust: -60 
                     };
                     if(rate === 0.10) { porscheDate10 = date; }
                 }
@@ -780,7 +780,7 @@
                     annotations[`house_${idx}`] = {
                         type: 'label', xValue: labels[i], yValue: 10,
                         content: [`${year}`, `${(rate*100).toFixed(1)}%`],
-                        position: 'center', color: colors[idx], font: { weight: 'bold', size: isMobile ? 8 : 10 }, yAdjust: -60 
+                        position: 'center', color: colors[idx], font: { weight: 'bold', size: isMobile ? 7 : 10 }, yAdjust: -60 
                     };
                     if(rate === 0.10) { houseDate10 = date; }
                 }
@@ -849,14 +849,14 @@
                         title: { display: true, text: 'Net Worth ($ Millions)' },
                         ticks: { 
                             callback: (val) => '$' + val + 'M',
-                            font: { size: isMobile ? 8 : 12 } // Mobile Font Fix
+                            font: { size: isMobile ? 7 : 12 } // Mobile Font Fix (Even Smaller)
                         }
                     },
                     x: {
                         title: { display: true, text: 'Year', font: {weight:'bold'} }, 
                         ticks: { 
                             maxTicksLimit: 20,
-                            font: { size: isMobile ? 8 : 12 }, // Mobile Font Fix
+                            font: { size: isMobile ? 7 : 12 }, // Mobile Font Fix (Even Smaller)
                             callback: function(val, index) {
                                 const label = this.getLabelForValue(val);
                                 if (label.includes('Jan')) return label.split(' ')[1]; 
@@ -1115,6 +1115,12 @@
                 layout: { padding: { right: isMobile ? 90 : 150 } }, // Responsive Padding Fix
                 interaction: { mode: 'index', intersect: false },
                 plugins: {
+                    legend: {
+                        // FIX: Left-align legend on mobile for straight lines
+                        align: isMobile ? 'start' : 'center',
+                        position: 'top',
+                        labels: { boxWidth: isMobile ? 12 : 40, padding: 10 }
+                    },
                     datalabels: {
                         align: 'right', anchor: 'end', offset: 5, backgroundColor: 'white', borderColor: (ctx) => ctx.dataset.borderColor,
                         borderWidth: 1, borderRadius: 4, padding: isMobile ? 4 : 6, color: 'black', 
