@@ -162,10 +162,10 @@
             .charts-row { grid-template-columns: 1fr; } 
         }
 
-        /* UPDATED: Increased breakpoint to 768px to cover large phones/small tablets */
+        /* MOBILE OPTIMIZATIONS */
         @media (max-width: 768px) {
             body { 
-                padding: 10px; /* Reduced padding for more screen space */
+                padding: 5px; /* Minimal padding to stretch content */
             }
             
             header { 
@@ -176,17 +176,31 @@
             header > div { width: 100%; }
             header div:last-child { text-align: left !important; margin-top: 5px; }
 
-            /* Force single column for stats */
+            /* FORCE 2 COLUMNS FOR STATS */
             .stats-grid { 
-                grid-template-columns: 1fr; 
+                grid-template-columns: 1fr 1fr; /* Explicitly 2 columns */
+                gap: 10px;
             } 
             
-            .stat-value { font-size: 1.6em; }
+            .stat-card {
+                padding: 15px 10px; /* Reduced padding inside cards */
+            }
             
-            /* Reduce internal card padding to save space */
-            .card { padding: 10px; }
+            .stat-value { 
+                font-size: 1.3em; /* Slightly smaller to fit 2 cols */
+            }
             
-            th, td { padding: 10px 8px; font-size: 0.85em; }
+            .stat-label {
+                font-size: 0.75em;
+            }
+            
+            /* FULL WIDTH TABLES / CARDS */
+            .card { 
+                padding: 10px 5px; /* Minimal side padding */
+                margin-bottom: 15px;
+            }
+            
+            th, td { padding: 10px 4px; font-size: 0.8em; }
             
             .chart-container { height: 300px; }
             .chart-container-tall { height: 350px; }
@@ -195,7 +209,7 @@
             .card > div[style*="overflow-x: auto"] {
                 -webkit-overflow-scrolling: touch;
                 padding-bottom: 5px;
-                width: 100%; /* Ensure table container uses full width */
+                width: 100%; 
             }
 
             /* Adjust dropdown width */
