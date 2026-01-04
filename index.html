@@ -205,11 +205,20 @@
             .chart-container { height: 300px; }
             .chart-container-tall { height: 350px; }
             
-            /* Horizontal Scroll Hint for Tables */
+            /* SCALED DOWN TABLES FOR MOBILE */
+            /* This forces the table container to be wide (like desktop) but scaled down to fit */
             .card > div[style*="overflow-x: auto"] {
-                -webkit-overflow-scrolling: touch;
-                padding-bottom: 5px;
-                width: 100%; 
+                overflow-x: hidden !important; /* Hide scrollbars since we are scaling */
+                width: 100%;
+                display: block;
+            }
+
+            table {
+                display: block;
+                width: 160% !important; /* Force table to be wider than screen */
+                transform: scale(0.62); /* Scale it back down to fit (100/160 = 0.625) */
+                transform-origin: top left; /* Anchor to top left */
+                margin-bottom: -38%; /* Remove the empty whitespace created by scaling */
             }
 
             /* Adjust dropdown width */
