@@ -950,7 +950,7 @@
         document.getElementById('proj-house-sub').innerText = `Estimated Date (${(rate*100).toFixed(1)}% Rtn)`;
     }
 
-    function renderProjectionChart(startBalance, startInflow, startDateStr) {
+    function renderProjectionChart(startBalance, startInflow, startDateStr, isSilent = false) {
         const rates = [0.05, 0.075, 0.10, 0.125, 0.15];
         projectionDataStore = {};
         projectionMetadata = {};
@@ -1067,6 +1067,7 @@
         charts.projection = new Chart(document.getElementById('projectionChart'), {
             type: 'line', data: { labels: labels, datasets: datasets },
             options: {
+                animation: isSilent ? false : {}, // Disabled if silent
                 responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
                 plugins: { legend: { display: true, position: 'top' }, tooltip: { callbacks: { label: (ctx) => ctx.dataset.label + ': $' + ctx.raw.toFixed(2) + 'M' } }, annotation: { annotations: annotations } },
                 scales: { 
@@ -1442,7 +1443,7 @@
         let projectionInflow = totalInflow; 
         if (lastIndex > 0) projectionInflow = globalTotals.income[lastIndex - 1] + globalTotals.deposits[lastIndex - 1];
         
-        renderProjectionChart(globalTotals.balance[lastIndex], projectionInflow, sortedMonths[lastIndex]);
+        renderProjectionChart(globalTotals.balance[lastIndex], projectionInflow, sortedMonths[lastIndex], isSilent);
 
         const palette = ['#3498db', '#9b59b6', '#2ecc71', '#e67e22', '#f1c40f', '#e74c3c'];
         const stackedDatasets = accounts.map((acc, index) => {
