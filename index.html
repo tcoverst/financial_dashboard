@@ -36,6 +36,22 @@
         }
         .container { max-width: 1400px; margin: 0 auto; width: 100%; }
         
+        /* FLOATING STATUS BOX (New) */
+        .status-floater {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: rgba(255, 255, 255, 0.95);
+            padding: 10px 15px;
+            border-radius: 8px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+            z-index: 999;
+            border: 1px solid rgba(0,0,0,0.05);
+            backdrop-filter: blur(5px);
+            text-align: right;
+            transition: all 0.3s ease;
+        }
+
         /* Headers */
         header {
             margin-bottom: 20px;
@@ -241,6 +257,7 @@
 
         @media (max-width: 768px) {
             body { padding: 5px; }
+            .status-floater { top: 10px; right: 10px; padding: 6px 12px; }
             header { flex-direction: column; align-items: flex-start; padding: 15px; }
             header > div { width: 100%; }
             header div:last-child { text-align: left !important; margin-top: 5px; }
@@ -262,17 +279,18 @@
 
 <div id="loading">Loading Dashboard Data...</div>
 
+<div class="status-floater">
+    <div style="font-size: 0.9em; font-weight: bold; color: #c0392b;" id="latest-date-display">
+        <span class="live-dot"></span>Connecting...
+    </div>
+    <div id="refresh-timer" style="font-size: 0.75em; color: #999; margin-top: 4px;">Updates in 60s</div>
+</div>
+
 <div class="container">
     <header>
         <div>
             <h1>Financial Dashboard</h1>
             <div class="subtitle">Investment Portfolio & Compensation Analysis</div>
-        </div>
-        <div style="text-align: right;">
-            <div style="font-size: 0.9em; font-weight: bold; color: #c0392b;" id="latest-date-display">
-                <span class="live-dot"></span>Connecting...
-            </div>
-            <div id="refresh-timer" style="font-size: 0.75em; color: #999; margin-top: 4px;">Updates in 60s</div>
         </div>
     </header>
 
