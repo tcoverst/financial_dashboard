@@ -135,7 +135,7 @@
         /* FLOATING STATUS BOX */
         .status-floater {
             position: fixed;
-            /* In embedded mode, top/left are set by JS */
+            /* Top/Left set dynamically by JS */
             background: var(--card-bg);
             padding: 10px 15px;
             border-radius: 8px;
@@ -145,16 +145,8 @@
             backdrop-filter: blur(5px);
             text-align: right;
             
-            /* Smoother transitions */
-            transition: top 0.3s ease-out, left 0.3s ease-out, right 0.3s ease-out;
-            will-change: top, left, right;
-        }
-
-        /* DOCKED STATE (CSS Controlled) */
-        .status-floater.docked {
-            top: 20px !important;
-            right: 80px !important;
-            left: auto !important; /* Clear inline left style */
+            /* Fluid Animation Settings - JS now controls the 'transition' property dynamically */
+            will-change: top, left;
         }
 
         /* UTILITY: DISABLE TRANSITION FOR IMMEDIATE UPDATES (used during theme switch) */
@@ -393,12 +385,7 @@
         @media (max-width: 768px) {
             body { padding: 5px; }
             /* Mobile adjustment for status if docked */
-            .status-floater.docked {
-                top: 15px !important;
-                right: 55px !important; /* Leave room for theme toggle */
-                left: auto !important;
-                padding: 6px 12px;
-            }
+            .status-floater.mobile-dock { top: 70px !important; left: auto !important; right: 10px !important; padding: 6px 12px; }
             
             header { 
                 padding: 15px; 
@@ -439,7 +426,7 @@
     </svg>
 </div>
 
-<div id="status-floater" class="status-floater" style="top: 0; left: 0; opacity: 0;">
+<div id="status-floater" class="status-floater" style="top: -100px; left: 0;">
     <div style="font-size: 0.9em; font-weight: bold; color: var(--danger);" id="latest-date-display">
         <span class="live-dot"></span>Connecting...
     </div>
@@ -753,39 +740,68 @@
     // ==========================================
     // FLUID STATUS BOX POSITIONING LOGIC
     // ==========================================
+    let isDockedState = false; // Add state tracking outside function
+
     function updateStatusPosition() {
         const floater = document.getElementById('status-floater');
         const placeholder = document.getElementById('status-placeholder');
         if (!floater || !placeholder) return;
 
         const scrollY = window.scrollY;
-        const threshold = 50; 
+        const threshold = 50; // Scroll amount before docking starts
+        const isMobile = window.innerWidth <= 768;
 
-        // Initial Show (prevents flash of unpositioned element)
-        floater.style.opacity = '1';
+        // "Docked" Coordinates
+        const dockTop = isMobile ? 70 : 20;
+        const dockRight = isMobile ? 10 : 80;
+        
+        // Ensure offsetWidth is valid before calc
+        const fWidth = floater.offsetWidth || 200; 
+        const dockLeft = window.innerWidth - dockRight - fWidth;
 
-        if (scrollY > threshold) {
-            // DOCKED MODE - Let CSS handle the fixed positioning via class
-            floater.classList.add('docked');
-            // Clean inline styles to allow CSS to work
-            floater.style.top = '';
-            floater.style.left = '';
-        } else {
-            // EMBEDDED MODE - Manual positioning relative to placeholder
-            floater.classList.remove('docked');
+        const shouldDock = scrollY > threshold;
+
+        if (shouldDock) {
+            // DOCKED MODE
+            floater.style.top = dockTop + 'px';
+            floater.style.left = dockLeft + 'px';
             
+            // Enable transition when docking or resizing in dock mode
+            if (!isDockedState) {
+                floater.style.transition = 'top 0.6s cubic-bezier(0.16, 1, 0.3, 1), left 0.6s cubic-bezier(0.16, 1, 0.3, 1)';
+                isDockedState = true;
+                floater.classList.add('mobile-dock');
+            }
+        } else {
+            // EMBEDDED MODE
             const pRect = placeholder.getBoundingClientRect();
-            // pRect is relative to viewport, which matches 'fixed'
+            
             floater.style.top = pRect.top + 'px';
-            floater.style.left = pRect.left + 'px';
+            floater.style.left = (pRect.left + (isMobile ? 0 : 0)) + 'px';
+            
+            if (isDockedState) {
+                // Just switching back to embedded: Keep transition for the return animation
+                floater.style.transition = 'top 0.6s cubic-bezier(0.16, 1, 0.3, 1), left 0.6s cubic-bezier(0.16, 1, 0.3, 1)';
+                isDockedState = false;
+                floater.classList.remove('mobile-dock');
+            } else {
+                // Scrolling within embedded mode: DISABLE transition to prevent lag/float-away
+                floater.style.transition = 'none';
+            }
         }
     }
 
     // Bind Scroll and Resize events
     window.addEventListener('scroll', updateStatusPosition);
     window.addEventListener('resize', updateStatusPosition);
-    // Initial Call
-    window.addEventListener('DOMContentLoaded', updateStatusPosition);
+    // Initial Call - Wait for layout to settle
+    window.addEventListener('DOMContentLoaded', () => {
+        setTimeout(updateStatusPosition, 100); 
+    });
+    // Extra safety for full load (images/fonts)
+    window.onload = () => {
+        setTimeout(updateStatusPosition, 100);
+    };
 
 
     // ==========================================
