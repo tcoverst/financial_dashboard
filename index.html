@@ -22,40 +22,158 @@
             --text: #2c3e50;
             --accent: #8e44ad;
             --goal: #e67e22;
+            --border-color: rgba(0,0,0,0.05);
+            --font-main: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
         }
+        
+        /* =========================================
+           SCI-FI / DARK MODE OVERRIDES
+           ========================================= */
+        body.sci-fi-mode {
+            --primary: #bdc3c7;
+            --success: #00ff88; /* Neon Green */
+            --danger: #ff4757;  /* Neon Red */
+            --bg: #050505;      /* Deep Space Black */
+            --card-bg: rgba(20, 20, 20, 0.65); /* Glassy Dark */
+            --text: #ecf0f1;
+            --accent: #a29bfe;
+            --goal: #fab1a0;
+            --border-color: rgba(255,255,255,0.15);
+            font-family: 'Inter', var(--font-main);
+        }
+
+        /* Enforce font consistency in dark mode */
+        body.sci-fi-mode * {
+            font-family: 'Inter', var(--font-main);
+        }
+
+        body.sci-fi-mode .container {
+            max-width: 1600px; /* Wider immersive view */
+        }
+
+        body.sci-fi-mode .card, 
+        body.sci-fi-mode .stat-card,
+        body.sci-fi-mode header {
+            border-radius: 0px; /* Sharp technical corners */
+            border: 1px solid var(--border-color);
+            box-shadow: none;
+            backdrop-filter: blur(10px); /* Frosted glass look */
+            position: relative;
+        }
+        
+        /* Tech Decoration: Corner Crosshairs */
+        body.sci-fi-mode .card::before {
+            content: '+';
+            position: absolute;
+            top: 5px; right: 8px;
+            color: rgba(255,255,255,0.2);
+            font-family: monospace;
+            font-size: 14px;
+        }
+
+        body.sci-fi-mode h1, 
+        body.sci-fi-mode h3, 
+        body.sci-fi-mode .section-header {
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            font-weight: 300;
+        }
+
+        body.sci-fi-mode .stat-value {
+            letter-spacing: -1px;
+            text-shadow: 0 0 10px rgba(255,255,255,0.1);
+        }
+
+        /* --- TABLE OVERRIDES FOR DARK MODE --- */
+        body.sci-fi-mode th {
+            background-color: rgba(255,255,255,0.1);
+            color: #bdc3c7;
+            text-transform: uppercase;
+            font-size: 0.75em;
+            letter-spacing: 1px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        body.sci-fi-mode td {
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+            color: #ecf0f1; /* Ensure bright text */
+        }
+        
+        body.sci-fi-mode tr:hover {
+            background-color: rgba(255,255,255,0.05);
+        }
+
+        /* Specific text color overrides for visibility in dark mode */
+        body.sci-fi-mode .text-green { color: #00ff88 !important; }
+        body.sci-fi-mode .text-red { color: #ff4757 !important; }
+        body.sci-fi-mode .text-purple { color: #a29bfe !important; }
+        body.sci-fi-mode .account-name { color: #fff; }
+        body.sci-fi-mode .sub-text { color: #95a5a6; }
+
+        /* Chart adjustments for transparency */
+        body.sci-fi-mode canvas {
+            filter: drop-shadow(0 0 5px rgba(255,255,255,0.1));
+        }
+
+        /* =========================================
+           STANDARD STYLES
+           ========================================= */
         
         html, body { overflow-x: hidden; }
 
         body {
-            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            font-family: var(--font-main);
             background-color: var(--bg);
             color: var(--text);
             margin: 0;
             padding: 20px;
             -webkit-font-smoothing: antialiased;
+            transition: background-color 0.5s ease, color 0.5s ease;
         }
-        .container { max-width: 1400px; margin: 0 auto; width: 100%; }
+        .container { max-width: 1400px; margin: 0 auto; width: 100%; transition: max-width 0.5s ease; }
         
-        /* FLOATING STATUS BOX (New) */
+        /* FLOATING STATUS BOX */
         .status-floater {
             position: fixed;
             top: 20px;
-            right: 20px;
-            background: rgba(255, 255, 255, 0.95);
+            right: 80px; 
+            background: var(--card-bg);
             padding: 10px 15px;
             border-radius: 8px;
             box-shadow: 0 4px 15px rgba(0,0,0,0.15);
-            z-index: 999;
-            border: 1px solid rgba(0,0,0,0.05);
+            z-index: 998;
+            border: 1px solid var(--border-color);
             backdrop-filter: blur(5px);
             text-align: right;
             transition: all 0.3s ease;
         }
+        
+        /* THEME TOGGLE BUTTON */
+        .theme-toggle {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            width: 50px;
+            height: 50px;
+            background: var(--primary);
+            color: white;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            z-index: 999;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            border: 2px solid white;
+            transition: transform 0.2s;
+        }
+        .theme-toggle:hover { transform: scale(1.1); }
+        .theme-toggle svg { width: 24px; height: 24px; fill: currentColor; }
 
         /* Headers */
         header {
             margin-bottom: 20px;
-            background: white;
+            background: var(--card-bg);
             padding: 20px;
             border-radius: 8px;
             box-shadow: 0 2px 4px rgba(0,0,0,0.05);
@@ -68,12 +186,12 @@
         .section-header {
             margin: 40px 0 20px 0;
             padding-bottom: 10px;
-            border-bottom: 2px solid #bdc3c7;
+            border-bottom: 2px solid var(--border-color);
             color: var(--primary);
             font-size: 1.5em;
             display: flex;
             align-items: center;
-            justify-content: space-between; /* Allow controls on right */
+            justify-content: space-between; 
             gap: 10px;
             flex-wrap: wrap;
         }
@@ -117,7 +235,7 @@
             width: 100%;
             min-width: 0; 
         }
-        .card h3 { margin-top: 0; margin-bottom: 15px; font-size: 1.1em; color: #34495e; border-bottom: 1px solid #eee; padding-bottom: 10px; }
+        .card h3 { margin-top: 0; margin-bottom: 15px; font-size: 1.1em; color: var(--text); border-bottom: 1px solid var(--border-color); padding-bottom: 10px; }
         
         /* Charts */
         .charts-row {
@@ -151,16 +269,16 @@
         }
         
         table { width: 100%; border-collapse: collapse; font-size: 0.9em; }
-        th, td { padding: 8px 10px; text-align: right; border-bottom: 1px solid #eee; white-space: nowrap; }
+        th, td { padding: 8px 10px; text-align: right; border-bottom: 1px solid var(--border-color); white-space: nowrap; }
         th:first-child, td:first-child { text-align: left; }
         th { background-color: #f8f9fa; font-weight: 600; color: #7f8c8d; }
-        tr:hover { background-color: #f1f1f1; }
+        tr:hover { background-color: rgba(0,0,0,0.02); }
         
         /* Compact Table Mode */
         .table-compact th, .table-compact td { padding: 5px 6px; font-size: 0.85em; }
 
         .ticker-tag {
-            background: #e8f4f8;
+            background: rgba(41, 128, 185, 0.1);
             color: #2980b9;
             padding: 2px 6px;
             border-radius: 4px;
@@ -168,27 +286,18 @@
             font-weight: 600;
             display: inline-block;
         }
+        body.sci-fi-mode .ticker-tag { color: #3498db; border: 1px solid #3498db; }
+
         .account-name { font-weight: 500; display: block; }
         .sub-text { font-size: 0.75em; color: #999; display: block; margin-top: 2px; }
         
         /* Controls */
-        .control-select {
-            padding: 5px 10px;
-            border-radius: 4px;
-            border: 1px solid #bdc3c7;
-            color: var(--primary);
-            font-weight: 600;
-            font-size: 0.9em;
-            background: white;
-            cursor: pointer;
-        }
-
         .filter-group {
             display: flex;
             gap: 15px;
             flex-wrap: wrap;
             margin-bottom: 15px;
-            background: #f8f9fa;
+            background: rgba(0,0,0,0.02);
             padding: 10px;
             border-radius: 6px;
         }
@@ -204,24 +313,19 @@
             align-items: center;
             font-size: 0.85em;
             cursor: pointer;
+            color: var(--text);
         }
         .checkbox-item input { margin-right: 6px; }
 
-        /* Radio Buttons Group */
         .radio-label {
             display: flex;
             align-items: center;
             cursor: pointer;
-            color: #2c3e50;
-            font-size: 0.85em; /* Matches checkbox-item size */
+            color: var(--text);
+            font-size: 0.85em; 
         }
-        .radio-label input {
-            margin-right: 6px;
-            cursor: pointer;
-        }
-        .radio-label:hover {
-            color: #2980b9;
-        }
+        .radio-label input { margin-right: 6px; cursor: pointer; }
+        .radio-label:hover { color: var(--accent); }
 
         /* Loading Overlay */
         #loading {
@@ -234,8 +338,8 @@
             gap: 10px;
             transition: opacity 0.3s ease;
         }
+        body.sci-fi-mode #loading { background: #000; color: #fff; }
         
-        /* Pulse animation for live dot */
         @keyframes pulse {
             0% { opacity: 1; }
             50% { opacity: 0.4; }
@@ -243,7 +347,7 @@
         }
         .live-dot {
             height: 8px; width: 8px; 
-            background-color: #c0392b; 
+            background-color: var(--danger); 
             border-radius: 50%; 
             display: inline-block; 
             margin-right: 5px;
@@ -257,7 +361,7 @@
 
         @media (max-width: 768px) {
             body { padding: 5px; }
-            .status-floater { top: 10px; right: 10px; padding: 6px 12px; }
+            .status-floater { top: 70px; right: 10px; padding: 6px 12px; }
             header { flex-direction: column; align-items: flex-start; padding: 15px; }
             header > div { width: 100%; }
             header div:last-child { text-align: left !important; margin-top: 5px; }
@@ -275,12 +379,18 @@
         }
     </style>
 </head>
-<body>
+<body class="">
 
 <div id="loading">Loading Dashboard Data...</div>
 
+<div class="theme-toggle" onclick="toggleTheme()" title="Switch View">
+    <svg viewBox="0 0 24 24">
+        <path d="M12,18C11.11,18 10.26,17.8 9.5,17.45C11.56,16.55 13,14.43 13,12C13,9.57 11.56,7.45 9.5,6.55C10.26,6.2 11.11,6 12,6A6,6 0 0,1 18,12A6,6 0 0,1 12,18M20,8.69V4H15.31L12,0.69L8.69,4H4V8.69L0.69,12L4,15.31V20H8.69L12,23.31L15.31,20H20V15.31L23.31,12L20,8.69Z" />
+    </svg>
+</div>
+
 <div class="status-floater">
-    <div style="font-size: 0.9em; font-weight: bold; color: #c0392b;" id="latest-date-display">
+    <div style="font-size: 0.9em; font-weight: bold; color: var(--danger);" id="latest-date-display">
         <span class="live-dot"></span>Connecting...
     </div>
     <div id="refresh-timer" style="font-size: 0.75em; color: #999; margin-top: 4px;">Updates in 60s</div>
@@ -348,7 +458,7 @@
                 </table>
             </div>
             
-            <h3 style="margin-top: 30px; border-top: 2px solid #ecf0f1; padding-top: 20px;">Previous Month Breakdown</h3>
+            <h3 style="margin-top: 30px; border-top: 2px solid var(--border-color); padding-top: 20px;">Previous Month Breakdown</h3>
             <div class="table-responsive">
                 <table id="prevSnapshotTable" class="table-compact">
                     <thead>
@@ -453,7 +563,7 @@
             </div>
     </div>
 
-    <div class="card" style="display:flex; align-items:center; justify-content:space-between; background:#f8f9fa;">
+    <div class="card" style="display:flex; align-items:center; justify-content:space-between; background:var(--bg);">
         <div>
             <h3 style="margin:0; border:none; padding:0;">Trailing 12-Month After-Tax Income</h3>
             <div class="subtitle">Total liquid deposits (Based on selection above)</div>
@@ -522,16 +632,16 @@
         </div>
         <div class="stat-card orange">
             <div class="stat-label">Porsche Purchase</div>
-            <div style="font-size:0.9em; font-weight:bold; margin-top:4px; color:#2c3e50;">$3M Goal</div>
-            <div style="font-size:0.9em; font-weight:bold; color:#c0392b;">$300k Cost</div>
+            <div style="font-size:0.9em; font-weight:bold; margin-top:4px; color:var(--text);">$3M Goal</div>
+            <div style="font-size:0.9em; font-weight:bold; color:var(--danger);">$300k Cost</div>
             <div class="stat-value" id="proj-porsche-date">-</div>
             <div class="stat-sub" id="proj-porsche-countdown" style="font-weight:bold; color:var(--primary); font-size:0.9em; margin-bottom:2px">-</div>
             <div class="stat-sub" id="proj-porsche-sub">Estimated Date</div>
         </div>
          <div class="stat-card orange">
             <div class="stat-label">Beach House</div>
-            <div style="font-size:0.9em; font-weight:bold; margin-top:4px; color:#2c3e50;">$10M Goal</div>
-            <div style="font-size:0.9em; font-weight:bold; color:#c0392b;">$5M Cost</div>
+            <div style="font-size:0.9em; font-weight:bold; margin-top:4px; color:var(--text);">$10M Goal</div>
+            <div style="font-size:0.9em; font-weight:bold; color:var(--danger);">$5M Cost</div>
             <div class="stat-value" id="proj-house-date">-</div>
             <div class="stat-sub" id="proj-house-countdown" style="font-weight:bold; color:var(--primary); font-size:0.9em; margin-bottom:2px">-</div>
             <div class="stat-sub" id="proj-house-sub">Estimated Date</div>
@@ -549,12 +659,12 @@
     </div>
 
     <div class="card">
-        <h3 style="margin-bottom:15px; border-bottom:1px solid #eee; padding-bottom:10px;">Detailed Projection Breakdown</h3>
+        <h3 style="margin-bottom:15px; border-bottom:1px solid var(--border-color); padding-bottom:10px;">Detailed Projection Breakdown</h3>
         
-        <div style="background:#f8f9fa; padding:15px; border-radius:6px; margin-bottom:20px; font-size:0.9em; line-height:1.6; color:#555;">
+        <div style="background:var(--bg); padding:15px; border-radius:6px; margin-bottom:20px; font-size:0.9em; line-height:1.6; color:var(--text); border:1px solid var(--border-color);">
             <strong>The Math Behind the Numbers:</strong><br>
             Future values are calculated monthly using the formula: 
-            <code style="background:#eee; padding:2px 4px; border-radius:3px; color:#c0392b; font-family:monospace; word-break: break-word;">Balance(t) = Balance(t-1) × (1 + AnnualRate/12) + MonthlyInflow(t)</code>.<br>
+            <code style="background:var(--card-bg); padding:2px 4px; border-radius:3px; color:var(--danger); font-family:monospace; word-break: break-word;">Balance(t) = Balance(t-1) × (1 + AnnualRate/12) + MonthlyInflow(t)</code>.<br>
             <strong>Contribution Assumptions:</strong>
             The "Monthly Inflow" (your investment contributions) automatically increases by <strong>6% every January</strong> (simulating raises/bonus) and <strong>3% every July</strong> (simulating mid-year adjustments).
         </div>
@@ -579,13 +689,120 @@
 
 <script>
     // ==========================================
+    // THEME HANDLING
+    // ==========================================
+    let isSciFiMode = false;
+
+    function toggleTheme() {
+        isSciFiMode = !isSciFiMode;
+        document.body.classList.toggle('sci-fi-mode');
+        
+        // Reload TradingView with correct theme
+        initTradingView(isSciFiMode ? "dark" : "light");
+        
+        // Update Chart.js Styles
+        updateChartStyles();
+        
+        // Force Re-render of tables to apply new background color logic immediately
+        if(globalAccountsData && globalAccountsData.length > 0) {
+            processAndRender(globalAccountsData, true);
+        }
+    }
+
+    function hexToRgba(hex, alpha) {
+        let r = parseInt(hex.slice(1, 3), 16),
+            g = parseInt(hex.slice(3, 5), 16),
+            b = parseInt(hex.slice(5, 7), 16);
+        return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+    }
+
+    function updateChartStyles() {
+        // Set Global Chart Defaults so new elements inherit correctly
+        Chart.defaults.color = isSciFiMode ? '#ecf0f1' : '#2c3e50';
+        Chart.defaults.borderColor = isSciFiMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)';
+
+        const textColor = isSciFiMode ? '#ecf0f1' : '#2c3e50';
+        const gridColor = isSciFiMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)';
+        const alphaFill = isSciFiMode ? 0.3 : 0.6; 
+
+        Object.values(charts).forEach(chart => {
+            if (!chart) return;
+
+            // Update Scales
+            if (chart.options.scales) {
+                ['x', 'y'].forEach(axis => {
+                    if (chart.options.scales[axis]) {
+                        if (chart.options.scales[axis].ticks) chart.options.scales[axis].ticks.color = textColor;
+                        if (chart.options.scales[axis].grid) chart.options.scales[axis].grid.color = gridColor;
+                        if (chart.options.scales[axis].title) chart.options.scales[axis].title.color = textColor;
+                    }
+                });
+            }
+
+            // Update Plugins (Legend, Title, Datalabels)
+            if (chart.options.plugins) {
+                if (chart.options.plugins.legend) {
+                     chart.options.plugins.legend.labels.color = textColor;
+                }
+                if (chart.options.plugins.title) {
+                    chart.options.plugins.title.color = textColor;
+                }
+                if (chart.options.plugins.datalabels) {
+                    chart.options.plugins.datalabels.color = textColor;
+                }
+            }
+            
+            // SPECIFIC FIX FOR BALANCE CHART LABELS
+            if (chart.canvas.id === 'balanceChart') {
+                if (chart.options.plugins && chart.options.plugins.datalabels) {
+                    if (isSciFiMode) {
+                        // Dark Mode: Colored Background, White Text
+                        chart.options.plugins.datalabels.backgroundColor = function(context) {
+                            return context.dataset.backgroundColor;
+                        };
+                        chart.options.plugins.datalabels.borderColor = function(context) {
+                            return context.dataset.borderColor;
+                        };
+                        chart.options.plugins.datalabels.color = '#ffffff'; 
+                    } else {
+                        // Light Mode: White Background, Black Text
+                        chart.options.plugins.datalabels.backgroundColor = 'white';
+                        chart.options.plugins.datalabels.borderColor = function(context) {
+                            return context.dataset.borderColor;
+                        };
+                        chart.options.plugins.datalabels.color = 'black';
+                    }
+                }
+            } else {
+                 // General Datalabels update for other charts (text color only)
+                 if (chart.options.plugins && chart.options.plugins.datalabels) {
+                    chart.options.plugins.datalabels.color = textColor;
+                }
+            }
+
+            // Update Datasets (Transparency)
+            chart.data.datasets.forEach(dataset => {
+                if (dataset.backgroundColor && typeof dataset.backgroundColor === 'string' && dataset.backgroundColor.startsWith('#')) {
+                    dataset.backgroundColor = hexToRgba(dataset.backgroundColor.slice(0, 7), alphaFill);
+                } else if (Array.isArray(dataset.backgroundColor)) {
+                     dataset.backgroundColor = dataset.backgroundColor.map(c => {
+                         if(c.startsWith('#')) return hexToRgba(c.slice(0, 7), alphaFill);
+                         return c;
+                     });
+                }
+            });
+
+            chart.update();
+        });
+    }
+
+
+    // ==========================================
     // DATA SOURCES
     // ==========================================
     
-    // 1. GOOGLE SHEETS API
     const API_URL = 'https://script.google.com/macros/s/AKfycbxEzEutSYlhftlhNq_EI-dJRwARlcB00enAAm_9pkDxX5m8mhdtr8OsRx1rzneN4gXy/exec';
 
-    // 2. TICKER MAPPING
     const TICKER_MAP = {
         'VIGIX': 'VIGIX',
         'VTSAX': 'VTSAX',
@@ -597,9 +814,7 @@
 
     let projectionDataStore = {};
     let projectionMetadata = {}; 
-    let globalAccountsData = []; // Store for filtering & refreshing
-    
-    // Chart Instances Store (for destruction before re-render)
+    let globalAccountsData = []; 
     let charts = {};
 
     let refreshInterval = null;
@@ -641,7 +856,7 @@
     }
 
     // ==========================================
-    // LOGIC: REAL-TIME MARKET DATA (ROBUST)
+    // LOGIC: REAL-TIME MARKET DATA
     // ==========================================
 
     async function getMonthToDatePerformance(ticker) {
@@ -654,7 +869,6 @@
             'https://thingproxy.freeboard.io/fetch/' 
         ];
 
-        // Random cache buster to prevent sticky bad responses
         const cacheBuster = `&_=${new Date().getTime()}`;
         const targetUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${cleanTicker}?range=3mo&interval=1d${cacheBuster}`;
 
@@ -686,12 +900,10 @@
 
                 if (!closes || closes.length === 0) continue;
 
-                // LOGIC UPDATE: Handle Mutual Funds / Intraday Delays
                 const now = new Date();
                 const startOfCurrentMonth = new Date(now.getFullYear(), now.getMonth(), 1);
                 
                 let baselinePrice = null;
-                // Walk backwards to find the last price BEFORE the 1st of this month
                 for (let i = timestamps.length - 1; i >= 0; i--) {
                     const date = new Date(timestamps[i] * 1000);
                     if (date < startOfCurrentMonth && closes[i]) {
@@ -700,7 +912,6 @@
                     }
                 }
 
-                // Find Current Price (Most Recent Valid Close)
                 let currentPrice = null;
                 for (let i = closes.length - 1; i >= 0; i--) {
                     if (closes[i] !== null && closes[i] !== undefined) {
@@ -715,10 +926,9 @@
 
             } catch (e) {
                 console.warn(`Proxy ${proxy} failed for ${cleanTicker}:`, e);
-                // Continue to next proxy
             }
         }
-        return null; // Return NULL to indicate failure (not 0)
+        return null; 
     }
 
     async function updateWithLiveMarketData(accounts, isSilent = false) {
@@ -730,7 +940,6 @@
             statusDiv.style.display = 'flex';
             statusDiv.innerHTML = "Fetching Real-Time Market Data...<br><span style='font-size:0.8em; font-weight:normal'>Trying multiple sources...</span>";
         } else {
-            // Subtle indicator for background refresh
             headerStatus.innerHTML = "<span class='live-dot'></span> Updating Market Data...";
             headerStatus.style.color = "#e67e22";
         }
@@ -745,7 +954,6 @@
 
             const startOfThisMonth = new Date(currentYear, currentMonthVal - 1, 1);
             let baselineEntry = null;
-            // Find Baseline
             for (let i = acc.data.length - 1; i >= 0; i--) {
                 if (acc.data[i].dateObj < startOfThisMonth) {
                     baselineEntry = acc.data[i];
@@ -755,7 +963,6 @@
 
             if (!baselineEntry) return;
 
-            // Find or Create Live Entry
             let liveEntry = acc.data.find(d => d.key === currentMonthKey);
             let isNewRow = false;
 
@@ -779,7 +986,6 @@
                 liveEntry.isError = false;
             }
 
-            // Calculation
             let ticker = liveEntry.invested; 
             if (acc.id.includes('fidelity')) ticker = 'GOOGL';
             if (acc.id.includes('boeing')) ticker = 'Boeing (Bonds)';
@@ -788,15 +994,12 @@
             const mtdGrowthRate = await getMonthToDatePerformance(ticker);
             
             if (mtdGrowthRate === null) {
-                // FAILURE CASE
                 liveEntry.isError = true;
-                // keep previous values if they exist, or reset to 0 growth
                 if (isNewRow) {
                     liveEntry.marketGain = 0;
                     liveEntry.balance = baselineEntry.balance + liveEntry.deposits + liveEntry.income;
                 }
             } else {
-                // SUCCESS CASE
                 const growthAmount = baselineEntry.balance * mtdGrowthRate;
                 liveEntry.marketGain = growthAmount; 
                 liveEntry.balance = baselineEntry.balance + growthAmount + liveEntry.deposits + liveEntry.income;
@@ -922,7 +1125,6 @@
     }
 
     function updateProjectionTable() {
-        // UPDATED: Get value from Radio instead of Select
         const rate = parseFloat(document.querySelector('input[name="extrapolationRate"]:checked').value);
         const data = projectionDataStore[rate];
         const tbody = document.getElementById('projectionTableBody');
@@ -941,7 +1143,7 @@
                 <td style="color:#27ae60;">
                     +${fmtMoney(row.annualGrowth)}
                 </td>
-                <td style="font-weight:bold; color:#2c3e50; background:#f1f2f6;">
+                <td style="font-weight:bold; color:var(--text); background:rgba(0,0,0,0.05);">
                     ${fmtMoney(row.endBal)}
                 </td>
             `;
@@ -950,14 +1152,13 @@
     }
 
     function updateExtrapolationCards() {
-        // UPDATED: Get value from Radio instead of Select
         const rate = parseFloat(document.querySelector('input[name="extrapolationRate"]:checked').value);
         const meta = projectionMetadata[rate];
 
         if (!meta) return;
 
         document.getElementById('card-nw-label').innerText = `Projected Net Worth (${(rate*100).toFixed(1)}%)`;
-        document.getElementById('proj-nw-card').innerHTML = `<div>${fmtMoneySimple(meta.finalLiquid)} <span style="font-size:0.6em; color:#7f8c8d">Liquid</span></div><div style="font-size:0.8em; margin-top:4px; color:#2c3e50">${fmtMoneySimple(meta.totalNW)} <span style="font-size:0.8em; color:#7f8c8d">Total</span></div>`;
+        document.getElementById('proj-nw-card').innerHTML = `<div>${fmtMoneySimple(meta.finalLiquid)} <span style="font-size:0.6em; color:#7f8c8d">Liquid</span></div><div style="font-size:0.8em; margin-top:4px; color:var(--text)">${fmtMoneySimple(meta.totalNW)} <span style="font-size:0.8em; color:#7f8c8d">Total</span></div>`;
         
         document.getElementById('proj-porsche-date').innerText = meta.porscheDate ? meta.porscheDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) : "Not Reached";
         document.getElementById('proj-porsche-countdown').innerText = formatCountdown(meta.porscheDate);
@@ -1085,7 +1286,7 @@
         charts.projection = new Chart(document.getElementById('projectionChart'), {
             type: 'line', data: { labels: labels, datasets: datasets },
             options: {
-                animation: isSilent ? false : {}, // Disabled if silent
+                animation: isSilent ? false : {}, 
                 responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
                 plugins: { legend: { display: true, position: 'top' }, tooltip: { callbacks: { label: (ctx) => ctx.dataset.label + ': $' + ctx.raw.toFixed(2) + 'M' } }, annotation: { annotations: annotations } },
                 scales: { 
@@ -1132,7 +1333,7 @@
                     key: `${year}-${month}`,
                     dateObj: new Date(year, month - 1, 1),
                     deposits: netTransfers,
-                    rawDeposits: deposits, // Added raw for income chart
+                    rawDeposits: deposits, 
                     rawWithdrawals: withdrawals,
                     marketGain: marketGain,
                     income: income,
@@ -1219,7 +1420,10 @@
             if (entry.balance < 0.01) return;
 
             const tr = document.createElement('tr');
-            if(entry.isLive) tr.style.backgroundColor = "#fef9e7"; 
+            if(entry.isLive) {
+                // If live, standard mode uses light yellow, scifi mode needs to handle it via CSS or JS
+                tr.style.backgroundColor = isSciFiMode ? 'rgba(255, 255, 0, 0.05)' : "#fef9e7"; 
+            }
 
             const totalNetDep = entry.balance - entry.cumulative;
             let roiPct = 0;
@@ -1548,15 +1752,22 @@
             });
             historyBody.appendChild(tr);
         }
+        
+        // Ensure charts respect current theme (important for initial load/refresh)
+        updateChartStyles();
     }
 
-    // --- TRADINGVIEW WIDGET ---
-    new TradingView.widget({
-        "container_id": "tv-widget-container", "autosize": true, "symbol": "NASDAQ:GOOGL", "interval": "D", "timezone": "America/New_York", "theme": "light", "style": "1", "locale": "en", "toolbar_bg": "#f1f3f6", "enable_publishing": false, "allow_symbol_change": true, "save_image": false, "details": true, "hotlist": false, "calendar": false,
-        "watchlist": ["NASDAQ:GOOGL", "NASDAQ:VIGIX", "NASDAQ:VTSAX", "NASDAQ:BND", "AMEX:BIL"]
-    });
+    // --- TRADINGVIEW WIDGET (Dynamic) ---
+    function initTradingView(theme) {
+        document.getElementById('tv-widget-container').innerHTML = ''; // Clear existing
+        new TradingView.widget({
+            "container_id": "tv-widget-container", "autosize": true, "symbol": "NASDAQ:GOOGL", "interval": "D", "timezone": "America/New_York", "theme": theme, "style": "1", "locale": "en", "toolbar_bg": "#f1f3f6", "enable_publishing": false, "allow_symbol_change": true, "save_image": false, "details": true, "hotlist": false, "calendar": false,
+            "watchlist": ["NASDAQ:GOOGL", "NASDAQ:VIGIX", "NASDAQ:VTSAX", "NASDAQ:BND", "AMEX:BIL"]
+        });
+    }
 
     initDashboard();
+    initTradingView('light'); // Default to light
 
 </script>
 </body>
