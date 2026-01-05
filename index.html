@@ -14,109 +14,40 @@
         * { box-sizing: border-box; }
 
         :root {
+            /* LIGHT MODE PALETTE (Default) */
             --primary: #2c3e50;
             --success: #27ae60;
             --danger: #c0392b;
             --bg: #ecf0f1;
-            --card-bg: #ffffff;
+            /* Glassy White for Light Mode */
+            --card-bg: rgba(255, 255, 255, 0.85); 
             --text: #2c3e50;
             --accent: #8e44ad;
             --goal: #e67e22;
-            --border-color: rgba(0,0,0,0.05);
-            --font-main: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            --border-color: rgba(0,0,0,0.1);
+            --crosshair-color: rgba(0,0,0,0.2);
+            --th-bg: rgba(0,0,0,0.05);
+            --font-main: 'Inter', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
         }
         
-        /* =========================================
-           SCI-FI / DARK MODE OVERRIDES
-           ========================================= */
+        /* DARK MODE OVERRIDES (Swaps colors only) */
         body.sci-fi-mode {
             --primary: #bdc3c7;
             --success: #00ff88; /* Neon Green */
             --danger: #ff4757;  /* Neon Red */
             --bg: #050505;      /* Deep Space Black */
-            --card-bg: rgba(20, 20, 20, 0.65); /* Glassy Dark */
+            /* Glassy Dark for Dark Mode */
+            --card-bg: rgba(20, 20, 20, 0.65); 
             --text: #ecf0f1;
             --accent: #a29bfe;
             --goal: #fab1a0;
             --border-color: rgba(255,255,255,0.15);
-            font-family: 'Inter', var(--font-main);
-        }
-
-        /* Enforce font consistency in dark mode */
-        body.sci-fi-mode * {
-            font-family: 'Inter', var(--font-main);
-        }
-
-        body.sci-fi-mode .container {
-            max-width: 1600px; /* Wider immersive view */
-        }
-
-        body.sci-fi-mode .card, 
-        body.sci-fi-mode .stat-card,
-        body.sci-fi-mode header {
-            border-radius: 0px; /* Sharp technical corners */
-            border: 1px solid var(--border-color);
-            box-shadow: none;
-            backdrop-filter: blur(10px); /* Frosted glass look */
-            position: relative;
-        }
-        
-        /* Tech Decoration: Corner Crosshairs */
-        body.sci-fi-mode .card::before {
-            content: '+';
-            position: absolute;
-            top: 5px; right: 8px;
-            color: rgba(255,255,255,0.2);
-            font-family: monospace;
-            font-size: 14px;
-        }
-
-        body.sci-fi-mode h1, 
-        body.sci-fi-mode h3, 
-        body.sci-fi-mode .section-header {
-            text-transform: uppercase;
-            letter-spacing: 2px;
-            font-weight: 300;
-        }
-
-        body.sci-fi-mode .stat-value {
-            letter-spacing: -1px;
-            text-shadow: 0 0 10px rgba(255,255,255,0.1);
-        }
-
-        /* --- TABLE OVERRIDES FOR DARK MODE --- */
-        body.sci-fi-mode th {
-            background-color: rgba(255,255,255,0.1);
-            color: #bdc3c7;
-            text-transform: uppercase;
-            font-size: 0.75em;
-            letter-spacing: 1px;
-            border-bottom: 1px solid var(--border-color);
-        }
-
-        body.sci-fi-mode td {
-            border-bottom: 1px solid rgba(255,255,255,0.05);
-            color: #ecf0f1; /* Ensure bright text */
-        }
-        
-        body.sci-fi-mode tr:hover {
-            background-color: rgba(255,255,255,0.05);
-        }
-
-        /* Specific text color overrides for visibility in dark mode */
-        body.sci-fi-mode .text-green { color: #00ff88 !important; }
-        body.sci-fi-mode .text-red { color: #ff4757 !important; }
-        body.sci-fi-mode .text-purple { color: #a29bfe !important; }
-        body.sci-fi-mode .account-name { color: #fff; }
-        body.sci-fi-mode .sub-text { color: #95a5a6; }
-
-        /* Chart adjustments for transparency */
-        body.sci-fi-mode canvas {
-            filter: drop-shadow(0 0 5px rgba(255,255,255,0.1));
+            --crosshair-color: rgba(255,255,255,0.2);
+            --th-bg: rgba(255,255,255,0.1);
         }
 
         /* =========================================
-           STANDARD STYLES
+           UNIFIED "TECH" STRUCTURAL STYLES
            ========================================= */
         
         html, body { overflow-x: hidden; }
@@ -130,37 +61,130 @@
             -webkit-font-smoothing: antialiased;
             transition: background-color 0.5s ease, color 0.5s ease;
         }
-        .container { max-width: 1400px; margin: 0 auto; width: 100%; transition: max-width 0.5s ease; }
+
+        .container { 
+            max-width: 1600px; /* Wide immersive view for both modes */
+            margin: 0 auto; 
+            width: 100%; 
+            transition: max-width 0.5s ease; 
+        }
+
+        /* TECH CARDS: Sharp corners, Borders, Glass Effect */
+        .card, 
+        .stat-card,
+        header {
+            border-radius: 0px; /* Sharp technical corners */
+            border: 1px solid var(--border-color);
+            box-shadow: none; /* Removed soft shadows */
+            backdrop-filter: blur(10px); /* Frosted glass look */
+            position: relative;
+            background: var(--card-bg);
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+
+        /* Tech Decoration: Corner Crosshairs */
+        .card::before {
+            content: '+';
+            position: absolute;
+            top: 5px; right: 8px;
+            color: var(--crosshair-color);
+            font-family: monospace;
+            font-size: 14px;
+            pointer-events: none;
+        }
+
+        /* TYPOGRAPHY: Uppercase, Spaced */
+        h1, h3, .section-header {
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            font-weight: 300;
+            color: var(--primary);
+        }
+
+        h1 { margin: 0; font-size: 24px; line-height: 1.2; }
+        .card h3 { margin-top: 0; margin-bottom: 15px; font-size: 1.1em; color: var(--text); border-bottom: 1px solid var(--border-color); padding-bottom: 10px; }
+
+        .stat-value {
+            letter-spacing: -1px;
+            /* subtle text shadow for depth */
+            text-shadow: 0 0 10px rgba(128,128,128,0.1); 
+            font-size: 1.8em; font-weight: 700; color: var(--primary); margin-top: 5px; word-break: break-word;
+        }
+
+        .stat-label { 
+            font-size: 0.85em; 
+            color: #7f8c8d; 
+            text-transform: uppercase; 
+            letter-spacing: 0.5px; 
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis; 
+        }
+
+        /* TABLE STYLES: Tech look */
+        .table-responsive {
+            width: 100%;
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch; 
+        }
         
+        table { width: 100%; border-collapse: collapse; font-size: 0.9em; }
+        
+        th { 
+            background-color: var(--th-bg);
+            color: var(--primary);
+            text-transform: uppercase;
+            font-size: 0.75em;
+            letter-spacing: 1px;
+            border-bottom: 1px solid var(--border-color);
+            padding: 8px 10px; text-align: right; font-weight: 600;
+        }
+
+        td { 
+            padding: 8px 10px; 
+            text-align: right; 
+            border-bottom: 1px solid var(--border-color); /* Faint border */
+            white-space: nowrap; 
+            color: var(--text);
+        }
+        
+        th:first-child, td:first-child { text-align: left; }
+        tr:hover { background-color: rgba(128,128,128,0.05); }
+        
+        /* SPECIFIC OVERRIDES FOR DARK MODE VISIBILITY */
+        body.sci-fi-mode .text-green { color: #00ff88 !important; }
+        body.sci-fi-mode .text-red { color: #ff4757 !important; }
+        body.sci-fi-mode .text-purple { color: #a29bfe !important; }
+        body.sci-fi-mode .account-name { color: #fff; }
+        body.sci-fi-mode .sub-text { color: #95a5a6; }
+        body.sci-fi-mode canvas { filter: drop-shadow(0 0 5px rgba(255,255,255,0.1)); }
+
         /* FLOATING STATUS BOX */
         .status-floater {
             position: fixed;
-            /* Top/Left set dynamically by JS */
             background: var(--card-bg);
             padding: 10px 15px;
-            border-radius: 8px;
+            border-radius: 0px; /* Sharp */
             box-shadow: 0 4px 15px rgba(0,0,0,0.15);
             z-index: 998;
             border: 1px solid var(--border-color);
             backdrop-filter: blur(5px);
             text-align: right;
-            will-change: top, left; /* Performance Optimization */
+            will-change: top, left; 
         }
 
-        /* UTILITY: DISABLE TRANSITION FOR IMMEDIATE UPDATES (used during theme switch) */
         .status-floater.no-transition {
             transition: none !important;
         }
 
-        /* THEME TOGGLE BUTTON - SMALLER SIZE */
+        /* THEME TOGGLE BUTTON */
         .theme-toggle {
             position: fixed;
             top: 15px;
             right: 15px;
-            width: 32px;  /* Reduced from 50px */
-            height: 32px; /* Reduced from 50px */
+            width: 32px;
+            height: 32px;
             background: var(--primary);
-            color: white;
+            color: var(--card-bg); /* Contrast icon */
             border-radius: 50%;
             display: flex;
             align-items: center;
@@ -168,37 +192,15 @@
             cursor: pointer;
             z-index: 999;
             box-shadow: 0 2px 8px rgba(0,0,0,0.2);
-            border: 2px solid white;
+            border: 2px solid var(--border-color);
             transition: transform 0.2s;
         }
         .theme-toggle:hover { transform: scale(1.1); }
-        .theme-toggle svg { width: 16px; height: 16px; fill: currentColor; } /* Reduced from 24px */
+        .theme-toggle svg { width: 16px; height: 16px; fill: currentColor; }
 
-        /* Headers */
-        header {
-            margin-bottom: 20px;
-            background: var(--card-bg);
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-            
-            /* Flexbox Layout for Responsive Status Box */
-            display: flex;
-            flex-direction: row; /* Default: Laptop Mode (Side-by-Side) */
-            justify-content: space-between;
-            align-items: center;
-            gap: 15px;
-            flex-wrap: wrap;
-        }
-
-        /* Title Container */
-        header > div:first-child {
-            /* Takes natural width */
-        }
-
-        /* Status Box Placeholder - Desktop Size */
+        /* --- LAYOUT UTILS --- */
         #status-placeholder {
-            width: 260px; /* Approx width of the status box to reserve space */
+            width: 260px;
             height: 50px;
             pointer-events: none;
             flex-shrink: 0;
@@ -208,29 +210,15 @@
             margin: 40px 0 20px 0;
             padding-bottom: 10px;
             border-bottom: 2px solid var(--border-color);
-            color: var(--primary);
-            font-size: 1.5em;
             display: flex;
             align-items: center;
             justify-content: space-between; 
             gap: 10px;
             flex-wrap: wrap;
         }
-        h1 { margin: 0; font-size: 24px; color: var(--primary); line-height: 1.2; }
         .subtitle { color: #7f8c8d; font-size: 0.9em; margin-top: 5px; }
         
-        /* Stats Grid */
-        .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-            gap: 15px;
-            margin-bottom: 30px;
-        }
         .stat-card {
-            background: var(--card-bg);
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
             border-left: 4px solid var(--primary);
             min-width: 0; 
         }
@@ -239,26 +227,11 @@
         .stat-card.purple { border-left-color: var(--accent); }
         .stat-card.orange { border-left-color: var(--goal); }
         
-        .stat-label { font-size: 0.85em; color: #7f8c8d; text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .stat-value { font-size: 1.8em; font-weight: 700; color: var(--primary); margin-top: 5px; word-break: break-word; }
         .stat-sub { font-size: 0.85em; margin-top: 5px; color: #7f8c8d; }
         .text-green { color: var(--success); }
         .text-red { color: var(--danger); }
         .text-purple { color: var(--accent); }
 
-        /* Cards */
-        .card {
-            background: var(--card-bg);
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-            margin-bottom: 20px;
-            width: 100%;
-            min-width: 0; 
-        }
-        .card h3 { margin-top: 0; margin-bottom: 15px; font-size: 1.1em; color: var(--text); border-bottom: 1px solid var(--border-color); padding-bottom: 10px; }
-        
-        /* Charts */
         .charts-row {
             display: grid;
             grid-template-columns: 2fr 1fr;
@@ -270,7 +243,6 @@
         .chart-container-tall { height: 480px; }
         .chart-container-small { height: 200px; } 
 
-        /* TradingView */
         .tv-card {
             height: 850px;
             margin-bottom: 50px;
@@ -282,19 +254,6 @@
         .tv-card h3 { padding: 20px; margin: 0; flex-shrink: 0; }
         .tv-widget-container { flex-grow: 1; width: 100%; height: auto; }
 
-        /* Tables */
-        .table-responsive {
-            width: 100%;
-            overflow-x: auto;
-            -webkit-overflow-scrolling: touch; 
-        }
-        
-        table { width: 100%; border-collapse: collapse; font-size: 0.9em; }
-        th, td { padding: 8px 10px; text-align: right; border-bottom: 1px solid var(--border-color); white-space: nowrap; }
-        th:first-child, td:first-child { text-align: left; }
-        th { background-color: #f8f9fa; font-weight: 600; color: #7f8c8d; }
-        tr:hover { background-color: rgba(0,0,0,0.02); }
-        
         /* Compact Table Mode */
         .table-compact th, .table-compact td { padding: 5px 6px; font-size: 0.85em; }
 
