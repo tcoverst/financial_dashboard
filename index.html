@@ -22,7 +22,6 @@
             --text: #2c3e50;
             --accent: #8e44ad;
             --goal: #e67e22;
-            --income: #2980b9;
         }
         
         html, body { overflow-x: hidden; }
@@ -84,7 +83,6 @@
         .stat-card.red { border-left-color: var(--danger); }
         .stat-card.purple { border-left-color: var(--accent); }
         .stat-card.orange { border-left-color: var(--goal); }
-        .stat-card.blue { border-left-color: var(--income); }
         
         .stat-label { font-size: 0.85em; color: #7f8c8d; text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .stat-value { font-size: 1.8em; font-weight: 700; color: var(--primary); margin-top: 5px; word-break: break-word; }
@@ -344,10 +342,10 @@
             <div class="stat-value" id="stat-total-comp">-</div>
             <div class="stat-sub">Base + Match + Bonus + Edu</div>
         </div>
-        <div class="stat-card blue">
-            <div class="stat-label">Total After-Tax Income</div>
-            <div class="stat-value" id="stat-last12-income">-</div>
-            <div class="stat-sub">Last 12 Months (Deposits)</div>
+        <div class="stat-card">
+            <div class="stat-label">Education Benefits (YTD)</div>
+            <div class="stat-value" id="stat-edu-ytd">-</div>
+            <div class="stat-sub">Tuition Reimbursement</div>
         </div>
         <div class="stat-card">
             <div class="stat-label">Match Rate</div>
@@ -373,8 +371,20 @@
 
     <div class="card">
         <h3>Monthly After-Tax Income (Last 24 Months)</h3>
+        <div class="subtitle" style="margin-bottom:15px">Sum of Deposits: Wells Fargo, UTMA, Plan A, Plan B</div>
         <div class="chart-container">
-            <canvas id="afterTaxIncomeChart"></canvas>
+            <canvas id="incomeTrendChart"></canvas>
+        </div>
+    </div>
+    
+    <div class="card" style="display:flex; align-items:center; justify-content:space-between; background:#f8f9fa;">
+        <div>
+            <h3 style="margin:0; border:none; padding:0;">Trailing 12-Month After-Tax Income</h3>
+            <div class="subtitle">Total liquid deposits across key accounts</div>
+        </div>
+        <div style="text-align:right;">
+             <div style="font-size:2em; font-weight:bold; color:var(--success);" id="stat-12mo-income">-</div>
+             <div style="font-size:0.8em; color:#7f8c8d;">Last 12 Months</div>
         </div>
     </div>
 
@@ -576,27 +586,38 @@
 
                 if (!closes || closes.length === 0) continue;
 
-                const currentPrice = closes[closes.length - 1];
+                // LOGIC UPDATE: Handle Mutual Funds / Intraday Delays
+                // 1. Find Baseline (Close of Last Month)
                 const now = new Date();
                 const startOfCurrentMonth = new Date(now.getFullYear(), now.getMonth(), 1);
                 
                 let baselinePrice = null;
-
-                // Find closing price of last day of previous month
+                // Walk backwards to find the last price BEFORE the 1st of this month
                 for (let i = timestamps.length - 1; i >= 0; i--) {
                     const date = new Date(timestamps[i] * 1000);
-                    if (date < startOfCurrentMonth) {
+                    if (date < startOfCurrentMonth && closes[i]) {
                         baselinePrice = closes[i]; 
                         break;
                     }
                 }
 
-                // Fallback to first available if history is short
-                if (baselinePrice === null && closes.length > 0) {
-                    baselinePrice = closes[0];
+                // 2. Find Current Price (Most Recent Valid Close)
+                // Filter out nulls from the end
+                let currentPrice = null;
+                for (let i = closes.length - 1; i >= 0; i--) {
+                    if (closes[i] !== null && closes[i] !== undefined) {
+                        currentPrice = closes[i];
+                        break;
+                    }
                 }
 
-                if (!baselinePrice || !currentPrice) return 0; // Should rarely happen if data exists
+                if (!baselinePrice || !currentPrice) return 0;
+                
+                // If it's the exact same price, it could be valid (no move), 
+                // OR it could be that the "current" candle is a placeholder for today.
+                // But for mutual funds, usually the chart API just omits today until close.
+                // We will trust the API but this calculation (current - baseline) should represent
+                // the move from Dec 31st to Jan X.
                 
                 return (currentPrice - baselinePrice) / baselinePrice;
 
@@ -635,12 +656,8 @@
 
             if (!baselineEntry) return;
 
-            // Check if there is ALREADY an entry for this month in the sheet data
-            // If the live fetch fails or is zero, we might want to fallback to this.
-            let existingSheetEntry = acc.data.find(d => d.key === currentMonthKey);
-
             // Find or Create Live Entry
-            let liveEntry = existingSheetEntry;
+            let liveEntry = acc.data.find(d => d.key === currentMonthKey);
             let isNewRow = false;
 
             if (!liveEntry) {
@@ -649,7 +666,6 @@
                     key: currentMonthKey,
                     dateObj: startOfThisMonth,
                     deposits: 0,
-                    rawDeposits: 0, // Initialize rawDeposits
                     income: 0,
                     marketGain: 0,
                     cumulative: baselineEntry.cumulative,
@@ -672,24 +688,14 @@
 
             const mtdGrowthRate = await getMonthToDatePerformance(ticker);
             
-            // LOGIC FIX: fallback to sheet data if live data is bad (null) or 0.00 for Mutual Funds
-            const isMutualFund = (ticker.includes('VIGIX') || ticker.includes('VTSAX'));
-            const isSuspiciousZero = (mtdGrowthRate === 0 && isMutualFund);
-
-            if (mtdGrowthRate === null || isSuspiciousZero) {
-                // FAILURE / SUSPICIOUS ZERO CASE
-                // If we have an existing sheet entry, REVERT to that data (trust the sheet)
-                if (existingSheetEntry) {
-                   // Do nothing, let the original values stand, just mark as checked
-                   liveEntry.isError = (mtdGrowthRate === null); 
-                } else {
-                   // No sheet entry, so we must assume 0
-                   liveEntry.isError = true;
-                   liveEntry.marketGain = 0;
-                   liveEntry.balance = baselineEntry.balance + liveEntry.deposits + liveEntry.income;
-                }
+            if (mtdGrowthRate === null) {
+                // FAILURE CASE
+                liveEntry.isError = true;
+                liveEntry.marketGain = 0;
+                liveEntry.balance = baselineEntry.balance + liveEntry.deposits + liveEntry.income;
             } else {
-                // SUCCESS CASE - We have a valid live rate
+                // SUCCESS CASE
+                // We calculate gain on the START balance (baseline)
                 const growthAmount = baselineEntry.balance * mtdGrowthRate;
                 liveEntry.marketGain = growthAmount; 
                 liveEntry.balance = baselineEntry.balance + growthAmount + liveEntry.deposits + liveEntry.income;
@@ -755,7 +761,7 @@
             data: {
                 labels: labels,
                 datasets: [
-                    { label: 'Base Salary', data: data.map(d => d.salary), backgroundColor: '#5dade2', stack: 'Stack 0' }, // Lighter Blue
+                    { label: 'Base Salary', data: data.map(d => d.salary), backgroundColor: '#5dade2', stack: 'Stack 0' }, 
                     { label: 'Company Match', data: data.map(d => d.matchAmt), backgroundColor: '#27ae60', stack: 'Stack 0' },
                     { label: 'Education (YTD)', data: data.map(d => d.ytdEdu), backgroundColor: '#e67e22', stack: 'Stack 0' },
                     { label: 'Bonus (YTD)', data: data.map(d => d.ytdBonus), backgroundColor: '#f1c40f', stack: 'Stack 0' }
@@ -766,8 +772,8 @@
                 plugins: {
                     legend: { position: 'top' },
                     datalabels: {
-                        color: '#000000', // Black text
-                        font: { weight: 'bold', size: isMobile ? 6 : 8 }, // SMALLER TEXT
+                        color: '#000000', 
+                        font: { weight: 'bold', size: isMobile ? 6 : 8 }, 
                         formatter: (val) => val > 500 ? fmtMoneySimple(val) : ''
                     }
                 },
@@ -790,7 +796,7 @@
                 plugins: {
                     legend: { position: 'right' },
                     datalabels: {
-                        color: '#000000', // BLACK TEXT
+                        color: '#000000', 
                         font: { weight: 'bold', size: isMobile ? 9 : 12 }, textAlign: 'center',
                         formatter: (val, ctx) => {
                             let sum = ctx.dataset.data.reduce((a, b) => a + b, 0);
@@ -814,7 +820,6 @@
     }
 
     function updateProjectionTable() {
-        // Read from the SINGLE dropdown
         const rate = parseFloat(document.getElementById('extrapolationRateSelect').value);
         const data = projectionDataStore[rate];
         const tbody = document.getElementById('projectionTableBody');
@@ -842,7 +847,6 @@
     }
 
     function updateExtrapolationCards() {
-        // Read from the SINGLE dropdown
         const rate = parseFloat(document.getElementById('extrapolationRateSelect').value);
         const meta = projectionMetadata[rate];
 
@@ -889,7 +893,7 @@
                 label: { 
                     display: true, content: 'Porsche 911 (-$300k)', position: 'start', 
                     backgroundColor: 'rgba(243, 156, 18, 0.9)', color: 'white',
-                    font: { size: isMobile ? 8 : 10, weight: 'bold' },  // SMALLER TEXT
+                    font: { size: isMobile ? 8 : 10, weight: 'bold' },  
                     yAdjust: -15, 
                     xAdjust: 10 
                 }
@@ -899,7 +903,7 @@
                 label: { 
                     display: true, content: 'Beach House (-$5M)', position: 'start', 
                     backgroundColor: 'rgba(22, 160, 133, 0.9)', color: 'white',
-                    font: { size: isMobile ? 8 : 10, weight: 'bold' }, // SMALLER TEXT
+                    font: { size: isMobile ? 8 : 10, weight: 'bold' }, 
                     yAdjust: -15, 
                     xAdjust: 10 
                 }
@@ -913,7 +917,6 @@
             let currentYearStats = { year: timeline[0].getFullYear(), startBal: balance, annualContrib: 0, annualGrowth: 0 };
             let yearlyData = [];
             
-            // Metadata tracking for this rate
             let porscheDate = null;
             let houseDate = null;
 
@@ -939,7 +942,6 @@
                 if (balance >= 3000000 && !porscheBought) {
                     balance -= 300000; porscheBought = true;
                     porscheDate = date;
-                    // Only add labels to chart for select rates to avoid clutter, or add all
                     annotations[`porsche_${idx}`] = { type: 'label', xValue: labels[i], yValue: 3, content: [`${year}`, `${(rate*100).toFixed(1)}%`], position: 'center', color: colors[idx], font: { weight: 'bold', size: isMobile ? 6 : 8 }, yAdjust: -40 };
                 }
                 if (balance >= 10000000 && !houseBought) {
@@ -972,7 +974,7 @@
             datasets.push({ label: (rate * 100).toFixed(1) + '%', data: dataPoints, borderColor: colors[idx], backgroundColor: colors[idx], borderWidth: 2, pointRadius: 0, tension: 0.4 });
         });
 
-        // Initial Update for Cards (Default 10%)
+        // Initial Update
         updateAllProjections();
 
         new Chart(document.getElementById('projectionChart'), {
@@ -983,11 +985,11 @@
                 scales: { 
                     y: { 
                         title: { display: true, text: 'Net Worth ($ Millions)' }, 
-                        ticks: { callback: (val) => '$' + val + 'M', font: { size: isMobile ? 6 : 10 } } // SMALLER TICKS
+                        ticks: { callback: (val) => '$' + val + 'M', font: { size: isMobile ? 6 : 10 } } 
                     }, 
                     x: { 
                         title: { display: true, text: 'Year', font: {weight:'bold'} }, 
-                        ticks: { maxTicksLimit: 20, font: { size: isMobile ? 6 : 10 }, callback: function(val) { const label = this.getLabelForValue(val); if (label.includes('Jan')) return label.split(' ')[1]; return null; } } // SMALLER TICKS
+                        ticks: { maxTicksLimit: 20, font: { size: isMobile ? 6 : 10 }, callback: function(val) { const label = this.getLabelForValue(val); if (label.includes('Jan')) return label.split(' ')[1]; return null; } } 
                     } 
                 }
             }
@@ -1004,8 +1006,8 @@
             const cols = rows[i];
             if (cols.length > 8) {
                 const dateStr = cols[0];
-                const rawDeposits = cleanMoney(cols[2]); // Capture Raw Deposits
-                const withdrawals = cleanMoney(cols[3]); // This captures column D
+                const deposits = cleanMoney(cols[2]);
+                const withdrawals = cleanMoney(cols[3]); 
                 const marketGain = cleanMoney(cols[4]);
                 const income = cleanMoney(cols[5]);
                 const cumulative = cleanMoney(cols[7]);
@@ -1018,14 +1020,14 @@
                 let month = dateParts[0].padStart(2, '0');
                 let year = dateParts[2];
                 // Net transfers for main chart
-                const netTransfers = rawDeposits + withdrawals;
+                const netTransfers = deposits + withdrawals;
 
                 data.push({
                     key: `${year}-${month}`,
                     dateObj: new Date(year, month - 1, 1),
                     deposits: netTransfers,
-                    rawDeposits: rawDeposits, // Store separated for Income Chart
-                    rawWithdrawals: withdrawals, 
+                    rawDeposits: deposits, // Added raw for income chart
+                    rawWithdrawals: withdrawals,
                     marketGain: marketGain,
                     income: income,
                     cumulative: cumulative,
@@ -1064,83 +1066,12 @@
             await updateWithLiveMarketData(accounts);
 
             processAndRender(accounts);
-            renderIncomeChart(accounts); // RENDER NEW CHART
-            
             document.getElementById('loading').style.display = 'none';
 
         } catch (error) {
             console.error(error);
             document.getElementById('loading').innerHTML = "Error loading data.<br>" + error.message;
         }
-    }
-
-    // NEW FUNCTION: Render After-Tax Income Chart and Stat
-    function renderIncomeChart(accounts) {
-        // Accounts to sum: Wells Fargo, Vanguard UTMA, Plan A, Plan B
-        const targetIds = ['wellsFargo', 'vanguardUTMA', 'vanguardA', 'vanguardB'];
-        
-        // Gather all unique months
-        const allMonthsSet = new Set();
-        accounts.forEach(acc => {
-            if (targetIds.includes(acc.id)) {
-                acc.data.forEach(d => allMonthsSet.add(d.key));
-            }
-        });
-        const sortedMonths = Array.from(allMonthsSet).sort();
-        
-        // Sum deposits per month
-        const incomeData = sortedMonths.map(month => {
-            let sum = 0;
-            targetIds.forEach(id => {
-                const acc = accounts.find(a => a.id === id);
-                if (acc) {
-                    const entry = acc.data.find(d => d.key === month);
-                    if (entry) sum += entry.rawDeposits;
-                }
-            });
-            return { month, value: sum };
-        });
-
-        // 1. Update the STAT (Last 12 Months)
-        const last12 = incomeData.slice(-12);
-        const totalLast12 = last12.reduce((acc, curr) => acc + curr.value, 0);
-        document.getElementById('stat-last12-income').innerText = fmtMoney(totalLast12);
-
-        // 2. Update the CHART (Last 24 Months)
-        const last24 = incomeData.slice(-24);
-        
-        new Chart(document.getElementById('afterTaxIncomeChart'), {
-            type: 'bar',
-            plugins: [ChartDataLabels],
-            data: {
-                labels: last24.map(d => d.month),
-                datasets: [{
-                    label: 'Monthly Income (Deposits)',
-                    data: last24.map(d => d.value),
-                    backgroundColor: '#2980b9',
-                    borderRadius: 4
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: { display: false },
-                    datalabels: {
-                        color: '#2c3e50',
-                        anchor: 'end',
-                        align: 'top',
-                        rotation: isMobile ? -90 : 0, // Vertical on mobile
-                        font: { weight: 'bold', size: 9 },
-                        formatter: (val) => val > 100 ? fmtMoneySimple(val) : '' 
-                    }
-                },
-                scales: {
-                    y: { beginAtZero: true, grid: { color: '#f0f0f0' }, ticks: { font: { size: 9 } } },
-                    x: { grid: { display: false }, ticks: { font: { size: 8 }, maxRotation: 90, minRotation: 90 } }
-                }
-            }
-        });
     }
 
     function createSnapshotTable(accounts, alignedData, index, tableId) {
@@ -1170,18 +1101,12 @@
             // Error handling display
             let marketGainDisplay = "";
             if (entry.isError) {
-                // If error, we might still have data from fallback
-                if(entry.marketGain !== 0 || entry.balance !== 0) {
-                     const gainClass = entry.marketGain >= 0 ? 'text-green' : 'text-red';
-                     marketGainDisplay = `<span class="${gainClass}">${entry.marketGain >= 0 ? '+' : ''}${fmtMoney(entry.marketGain + entry.income)}</span>`;
-                } else {
-                     marketGainDisplay = '<span style="color:#e74c3c; font-style:italic; font-size:0.9em;">Unavailable</span>';
-                }
+                marketGainDisplay = '<span style="color:#e74c3c; font-style:italic; font-size:0.9em;">Unavailable</span>';
             } else {
                  const isZero = (entry.marketGain === 0);
                  const gainClass = entry.marketGain >= 0 ? 'text-green' : 'text-red';
-                 // Check if it's a fund (VIGIX/VTSAX) and is zero (likely intraday)
                  let warning = "";
+                 // If zero and fund, likely intraday/unchanged, but label logic is safer now
                  if(isZero && (entry.invested.includes('VIGIX') || entry.invested.includes('VTSAX'))) {
                      warning = ' <span style="color:#f39c12; font-size:0.7em;">(Daily)</span>';
                  }
@@ -1240,11 +1165,67 @@
                     legend: { display: false },
                     datalabels: {
                         color: '#2c3e50',
-                        anchor: isMobile ? 'end' : 'center', // ADJUSTED
-                        align: isMobile ? 'top' : 'center',  // ADJUSTED
-                        rotation: isMobile ? -90 : 0,        // FIX: Vertical on Mobile, Horizontal on Laptop
+                        anchor: isMobile ? 'end' : 'end', // Anchor top for both
+                        align: isMobile ? 'top' : 'end', // Top (vertical) or Right (horizontal)
+                        rotation: isMobile ? -90 : 0,    // Rotate only on mobile
                         font: { weight: 'bold', size: 9 },
                         formatter: (val) => val > 200 ? fmtMoneySimple(val) : '' 
+                    }
+                },
+                scales: {
+                    y: { beginAtZero: true, grid: { color: '#f0f0f0' }, ticks: { font: { size: 9 } } },
+                    x: { grid: { display: false }, ticks: { font: { size: 8 }, maxRotation: 90, minRotation: 90 } }
+                }
+            }
+        });
+    }
+
+    function renderIncomeChart(accounts) {
+        // Targets: Wells Fargo, Vanguard UTMA, Vanguard Plan A, Vanguard Plan B
+        const targetIds = ['wellsFargo', 'vanguardUTMA', 'vanguardA', 'vanguardB'];
+        const targetAccounts = accounts.filter(a => targetIds.includes(a.id));
+        
+        // Align Data by Month
+        const allMonths = new Set();
+        targetAccounts.forEach(acc => acc.data.forEach(d => { if(!d.isLive) allMonths.add(d.key); }));
+        const sortedMonths = Array.from(allMonths).sort().slice(-24); // Last 24 months
+
+        const incomeData = sortedMonths.map(month => {
+            let sum = 0;
+            targetAccounts.forEach(acc => {
+                const entry = acc.data.find(d => d.key === month);
+                if (entry) sum += entry.rawDeposits;
+            });
+            return sum;
+        });
+
+        // Calculate Trailing 12 Month Sum
+        const last12Data = incomeData.slice(-12);
+        const trailing12Sum = last12Data.reduce((a,b) => a+b, 0);
+        document.getElementById('stat-12mo-income').innerText = fmtMoneySimple(trailing12Sum);
+
+        new Chart(document.getElementById('incomeTrendChart'), {
+            type: 'bar',
+            plugins: [ChartDataLabels],
+            data: {
+                labels: sortedMonths,
+                datasets: [{
+                    label: 'Total After-Tax Deposits',
+                    data: incomeData,
+                    backgroundColor: '#2ecc71',
+                    borderRadius: 3
+                }]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    datalabels: {
+                        color: '#2c3e50',
+                        anchor: 'end', align: 'top',
+                        rotation: -90,
+                        font: { weight: 'bold', size: 9 },
+                        formatter: (val) => val > 1000 ? fmtMoneySimple(val) : ''
                     }
                 },
                 scales: {
@@ -1333,6 +1314,9 @@
         
         // RENDER WF WIDGET
         renderWellsFargoWidget(accounts);
+
+        // RENDER INCOME CHART (New)
+        renderIncomeChart(accounts);
 
         // CHARTS
         const allocation = {};
