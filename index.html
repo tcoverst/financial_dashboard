@@ -419,9 +419,7 @@
         }
     </style>
 </head>
-<body class="">
-
-<div id="loading">Loading Dashboard Data...</div>
+<body class="sci-fi-mode"> <div id="loading">Loading Dashboard Data...</div>
 
 <div class="theme-toggle" onclick="toggleTheme()" title="Switch View">
     <svg viewBox="0 0 24 24">
@@ -773,7 +771,7 @@
     // ==========================================
     // THEME HANDLING
     // ==========================================
-    let isSciFiMode = false;
+    let isSciFiMode = true; // Changed default variable
 
     // GLOBAL PALETTE DEFINITION - Used everywhere for consistency
     const palette = ['#3498db', '#9b59b6', '#2ecc71', '#e67e22', '#f1c40f', '#e74c3c'];
@@ -1934,7 +1932,7 @@
     }
 
     initDashboard();
-    initTradingView('light'); // Default to light
+    initTradingView('dark'); // Changed default to dark
 
 </script>
 </body>
