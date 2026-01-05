@@ -20,14 +20,11 @@
             --bg: #ecf0f1;
             --card-bg: #ffffff;
             --text: #2c3e50;
-            --accent: #8e44ad; /* Salary section */
-            --goal: #e67e22;   /* Goals section */
+            --accent: #8e44ad;
+            --goal: #e67e22;
         }
         
-        /* FIX: Prevent horizontal page scroll */
-        html, body {
-            overflow-x: hidden; 
-        }
+        html, body { overflow-x: hidden; }
 
         body {
             font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
@@ -49,7 +46,7 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
-            flex-wrap: wrap; /* Allow wrapping on small screens */
+            flex-wrap: wrap; 
             gap: 15px;
         }
         .section-header {
@@ -60,13 +57,14 @@
             font-size: 1.5em;
             display: flex;
             align-items: center;
+            justify-content: space-between; /* Allow controls on right */
             gap: 10px;
             flex-wrap: wrap;
         }
         h1 { margin: 0; font-size: 24px; color: var(--primary); line-height: 1.2; }
         .subtitle { color: #7f8c8d; font-size: 0.9em; margin-top: 5px; }
         
-        /* Stats Grid - Responsive */
+        /* Stats Grid */
         .stats-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
@@ -79,7 +77,7 @@
             border-radius: 8px;
             box-shadow: 0 2px 4px rgba(0,0,0,0.05);
             border-left: 4px solid var(--primary);
-            min-width: 0; /* FIX: Prevents overflow in grid */
+            min-width: 0; 
         }
         .stat-card.green { border-left-color: var(--success); }
         .stat-card.red { border-left-color: var(--danger); }
@@ -93,7 +91,7 @@
         .text-red { color: var(--danger); }
         .text-purple { color: var(--accent); }
 
-        /* General Layout */
+        /* Cards */
         .card {
             background: var(--card-bg);
             padding: 20px;
@@ -101,7 +99,6 @@
             box-shadow: 0 2px 4px rgba(0,0,0,0.05);
             margin-bottom: 20px;
             width: 100%;
-            /* FIX: Critical for mobile charts not to overflow */
             min-width: 0; 
         }
         .card h3 { margin-top: 0; margin-bottom: 15px; font-size: 1.1em; color: #34495e; border-bottom: 1px solid #eee; padding-bottom: 10px; }
@@ -115,11 +112,10 @@
         }
         
         .chart-container { position: relative; height: 350px; width: 100%; }
-        
-        /* UPDATED: Height increased to 480px (20% taller than 400px) */
         .chart-container-tall { height: 480px; }
+        .chart-container-small { height: 200px; } 
 
-        /* TradingView Fixes */
+        /* TradingView */
         .tv-card {
             height: 850px;
             margin-bottom: 50px;
@@ -132,19 +128,21 @@
         .tv-widget-container { flex-grow: 1; width: 100%; height: auto; }
 
         /* Tables */
-        /* Table Wrapper for Scroll */
         .table-responsive {
             width: 100%;
             overflow-x: auto;
-            -webkit-overflow-scrolling: touch; /* Smooth scroll on iOS */
+            -webkit-overflow-scrolling: touch; 
         }
         
         table { width: 100%; border-collapse: collapse; font-size: 0.9em; }
-        th, td { padding: 12px 15px; text-align: right; border-bottom: 1px solid #eee; white-space: nowrap; }
+        th, td { padding: 8px 10px; text-align: right; border-bottom: 1px solid #eee; white-space: nowrap; }
         th:first-child, td:first-child { text-align: left; }
         th { background-color: #f8f9fa; font-weight: 600; color: #7f8c8d; }
         tr:hover { background-color: #f1f1f1; }
         
+        /* Compact Table Mode */
+        .table-compact th, .table-compact td { padding: 5px 6px; font-size: 0.85em; }
+
         .ticker-tag {
             background: #e8f4f8;
             color: #2980b9;
@@ -155,88 +153,52 @@
             display: inline-block;
         }
         .account-name { font-weight: 500; display: block; }
-        .account-sub { font-size: 0.8em; color: #95a5a6; }
         .sub-text { font-size: 0.75em; color: #999; display: block; margin-top: 2px; }
         
+        /* Controls */
+        .control-select {
+            padding: 5px 10px;
+            border-radius: 4px;
+            border: 1px solid #bdc3c7;
+            color: var(--primary);
+            font-weight: 600;
+            font-size: 0.9em;
+            background: white;
+            cursor: pointer;
+        }
+
         /* Loading Overlay */
         #loading {
             position: fixed; top: 0; left: 0; right: 0; bottom: 0;
             background: rgba(255,255,255,0.95);
             display: flex; justify-content: center; align-items: center;
             z-index: 1000; font-weight: bold; color: var(--primary);
+            text-align: center;
+            flex-direction: column;
+            gap: 10px;
         }
 
-        /* RESPONSIVE MEDIA QUERIES */
+        /* RESPONSIVE */
         @media (max-width: 900px) { 
             .charts-row { grid-template-columns: 1fr; } 
         }
 
-        /* MOBILE OPTIMIZATIONS */
         @media (max-width: 768px) {
-            body { 
-                padding: 5px; /* Minimal padding */
-            }
-            
-            header { 
-                flex-direction: column; 
-                align-items: flex-start; 
-                padding: 15px;
-            }
+            body { padding: 5px; }
+            header { flex-direction: column; align-items: flex-start; padding: 15px; }
             header > div { width: 100%; }
             header div:last-child { text-align: left !important; margin-top: 5px; }
-
-            /* 1. STATS: 2 COLUMNS */
-            .stats-grid { 
-                grid-template-columns: 1fr 1fr; 
-                gap: 10px;
-            } 
-            
-            .stat-card {
-                padding: 12px 10px;
-            }
-            
-            .stat-value { 
-                font-size: 1.4em; /* Fits better in 2 cols */
-            }
-            
-            .stat-label {
-                font-size: 0.7em;
-            }
-            
-            /* 2. TRADINGVIEW: REDUCED HEIGHT */
-            .tv-card {
-                height: 450px !important; /* Override desktop 850px */
-            }
-
-            /* 3. CHARTS: TALLER FOR STACKED DATA */
+            .stats-grid { grid-template-columns: 1fr 1fr; gap: 10px; } 
+            .stat-card { padding: 12px 10px; }
+            .stat-value { font-size: 1.4em; }
+            .stat-label { font-size: 0.7em; }
+            .tv-card { height: 450px !important; }
             .chart-container { height: 250px !important; }
-            /* INCREASED HEIGHT FOR BALANCE HISTORY MOBILE */
             .chart-container-tall { height: 550px !important; }
-
-            /* 4. TABLES: COMPACT & SCROLLABLE */
-            .card { 
-                padding: 10px 5px;
-                margin-bottom: 15px;
-            }
-            
-            /* Make text smaller to fit more columns */
-            th, td { 
-                padding: 8px 4px; 
-                font-size: 0.75em; /* 12px approx */
-            }
-            
-            /* Ensure the scroll container works */
-            .table-responsive {
-                display: block;
-                width: 100%;
-                overflow-x: auto;
-            }
-
-            /* Adjust dropdown width */
-            select#projectionRateSelect {
-                max-width: 100%;
-                font-size: 0.8em;
-            }
+            .card { padding: 10px 5px; margin-bottom: 15px; }
+            th, td { padding: 8px 4px; font-size: 0.75em; }
+            .table-responsive { display: block; width: 100%; overflow-x: auto; }
+            select#extrapolationRateSelect { max-width: 100%; font-size: 0.8em; }
         }
     </style>
 </head>
@@ -284,6 +246,13 @@
             <canvas id="balanceChart"></canvas>
         </div>
     </div>
+    
+    <div class="card">
+        <h3>Wells Fargo Monthly Withdrawals (Last 24 Months)</h3>
+        <div class="chart-container chart-container-small">
+            <canvas id="wfWithdrawalChart"></canvas>
+        </div>
+    </div>
 
     <div class="card tv-card">
         <h3>Live Market Watch (Your Positions)</h3>
@@ -294,21 +263,39 @@
         <div class="card">
             <h3>Current Investment Breakdown (Latest Month)</h3>
             <div class="table-responsive">
-                <table id="snapshotTable">
+                <table id="snapshotTable" class="table-compact">
                     <thead>
                         <tr>
-                            <th>Account / Investment</th>
+                            <th>Account</th>
                             <th>Balance</th>
-                            <th>1-Mo Gain (Prev)</th>
-                            <th>1-Mo Inflow (Prev)</th> 
-                            <th>Total Net Dep</th>
-                            <th>Total Return</th>
-                            <th>Rate of Return</th> </tr>
+                            <th>1-Mo Gain</th>
+                            <th>1-Mo Inflow</th> 
+                            <th>Net Dep</th>
+                            <th>Return</th>
+                            <th>ROI</th> </tr>
                     </thead>
                     <tbody id="snapshotBody"></tbody>
                 </table>
             </div>
+            
+            <h3 style="margin-top: 30px; border-top: 2px solid #ecf0f1; padding-top: 20px;">Previous Month Breakdown</h3>
+            <div class="table-responsive">
+                <table id="prevSnapshotTable" class="table-compact">
+                    <thead>
+                        <tr>
+                            <th>Account</th>
+                            <th>Balance</th>
+                            <th>1-Mo Gain</th>
+                            <th>1-Mo Inflow</th> 
+                            <th>Net Dep</th>
+                            <th>Return</th>
+                            <th>ROI</th> </tr>
+                    </thead>
+                    <tbody id="prevSnapshotBody"></tbody>
+                </table>
+            </div>
         </div>
+        
         <div class="card">
             <h3>Asset Allocation</h3>
             <div class="chart-container">
@@ -327,7 +314,7 @@
     <div class="card">
         <h3>Investment History Details</h3>
         <div class="table-responsive" style="max-height: 400px;">
-            <table id="historyTable">
+            <table id="historyTable" class="table-compact">
                 <thead>
                     <tr id="historyHeader">
                         <th>Month</th>
@@ -385,7 +372,7 @@
     <div class="card">
         <h3>Compensation History Details</h3>
         <div class="table-responsive" style="max-height: 400px;">
-            <table id="salaryTable">
+            <table id="salaryTable" class="table-compact">
                 <thead>
                     <tr>
                         <th>Date</th>
@@ -402,13 +389,20 @@
     </div>
 
     <div class="section-header">
-        +25 Year Extrapolation
+        <div>+25 Year Extrapolation</div>
+        <select id="extrapolationRateSelect" onchange="updateAllProjections()" class="control-select">
+            <option value="0.05">5% Return</option>
+            <option value="0.075">7.5% Return</option>
+            <option value="0.1" selected>10% Return (Baseline)</option>
+            <option value="0.125">12.5% Return</option>
+            <option value="0.15">15% Return</option>
+        </select>
     </div>
 
     <div class="stats-grid">
          <div class="stat-card orange">
-            <div class="stat-label">Projected Net Worth (10%)</div>
-            <div class="stat-value" id="proj-nw-10pct">-</div>
+            <div class="stat-label" id="card-nw-label">Projected Net Worth (10%)</div>
+            <div class="stat-value" id="proj-nw-card">-</div>
             <div class="stat-sub">In 25 Years</div>
         </div>
         <div class="stat-card orange">
@@ -417,7 +411,7 @@
             <div style="font-size:0.9em; font-weight:bold; color:#c0392b;">$300k Cost</div>
             <div class="stat-value" id="proj-porsche-date">-</div>
             <div class="stat-sub" id="proj-porsche-countdown" style="font-weight:bold; color:var(--primary); font-size:0.9em; margin-bottom:2px">-</div>
-            <div class="stat-sub">Estimated Date (10% Rtn)</div>
+            <div class="stat-sub" id="proj-porsche-sub">Estimated Date</div>
         </div>
          <div class="stat-card orange">
             <div class="stat-label">Beach House</div>
@@ -425,7 +419,7 @@
             <div style="font-size:0.9em; font-weight:bold; color:#c0392b;">$5M Cost</div>
             <div class="stat-value" id="proj-house-date">-</div>
             <div class="stat-sub" id="proj-house-countdown" style="font-weight:bold; color:var(--primary); font-size:0.9em; margin-bottom:2px">-</div>
-            <div class="stat-sub">Estimated Date (10% Rtn)</div>
+            <div class="stat-sub" id="proj-house-sub">Estimated Date</div>
         </div>
     </div>
 
@@ -440,16 +434,7 @@
     </div>
 
     <div class="card">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; border-bottom:1px solid #eee; padding-bottom:10px;">
-            <h3 style="margin:0; border:none; padding:0;">Detailed Projection Breakdown</h3>
-            <select id="projectionRateSelect" onchange="updateProjectionTable()" style="padding:5px; border-radius:4px; border:1px solid #ddd; font-weight:bold; color:var(--primary);">
-                <option value="0.05">5% Return (Conservative)</option>
-                <option value="0.075">7.5% Return</option>
-                <option value="0.1" selected>10% Return (Baseline)</option>
-                <option value="0.125">12.5% Return</option>
-                <option value="0.15">15% Return (Aggressive)</option>
-            </select>
-        </div>
+        <h3 style="margin-bottom:15px; border-bottom:1px solid #eee; padding-bottom:10px;">Detailed Projection Breakdown</h3>
         
         <div style="background:#f8f9fa; padding:15px; border-radius:6px; margin-bottom:20px; font-size:0.9em; line-height:1.6; color:#555;">
             <strong>The Math Behind the Numbers:</strong><br>
@@ -460,7 +445,7 @@
         </div>
     
         <div class="table-responsive" style="max-height: 500px;">
-            <table id="projectionTable">
+            <table id="projectionTable" class="table-compact">
                 <thead>
                     <tr>
                         <th style="width:10%">Year</th>
@@ -482,16 +467,25 @@
     // DATA SOURCES
     // ==========================================
     
-    // 2. GOOGLE SHEETS API
+    // 1. GOOGLE SHEETS API
     const API_URL = 'https://script.google.com/macros/s/AKfycbxEzEutSYlhftlhNq_EI-dJRwARlcB00enAAm_9pkDxX5m8mhdtr8OsRx1rzneN4gXy/exec';
 
-    // GLOBAL STORE FOR PROJECTION DATA (Calculated once, displayed dynamically)
+    // 2. TICKER MAPPING
+    const TICKER_MAP = {
+        'VIGIX': 'VIGIX',
+        'VTSAX': 'VTSAX',
+        'GOOGL': 'GOOGL',
+        'Fidelity (GOOGL)': 'GOOGL',
+        'Boeing (Bonds)': 'BND',    
+        'Wells Fargo (Cash)': 'BIL' 
+    };
+
     let projectionDataStore = {};
+    let projectionMetadata = {}; // To store dates/milestones per rate
 
     // ==========================================
     // UTILITIES
     // ==========================================
-    // Mobile Detection
     const isMobile = window.innerWidth <= 768;
 
     function cleanMoney(str) {
@@ -518,19 +512,128 @@
         if (!targetDate) return "N/A";
         const now = new Date();
         if (targetDate <= now) return "Achieved!";
-        
         let years = targetDate.getFullYear() - now.getFullYear();
         let months = targetDate.getMonth() - now.getMonth();
-        
-        if (months < 0) {
-            years--;
-            months += 12;
-        }
+        if (months < 0) { years--; months += 12; }
         return `${years} Years, ${months} Months remaining`;
     }
 
     // ==========================================
-    // LOGIC: SALARY
+    // LOGIC: REAL-TIME MARKET DATA
+    // ==========================================
+
+    async function getMonthToDatePerformance(ticker) {
+        if (!ticker || ticker === 'Unknown' || ticker === '-') return 0;
+        const cleanTicker = TICKER_MAP[ticker] || ticker.split(' ')[0]; 
+
+        try {
+            const encodedUrl = encodeURIComponent(`https://query1.finance.yahoo.com/v8/finance/chart/${cleanTicker}?range=3mo&interval=1d`);
+            const response = await fetch(`https://api.allorigins.win/get?url=${encodedUrl}`);
+            const wrapper = await response.json();
+            
+            if(!wrapper || !wrapper.contents) return 0;
+            const data = JSON.parse(wrapper.contents);
+
+            if (!data.chart || !data.chart.result || data.chart.result.length === 0) {
+                return 0;
+            }
+
+            const quote = data.chart.result[0];
+            const timestamps = quote.timestamp;
+            const closes = quote.indicators.quote[0].close;
+
+            const currentPrice = closes[closes.length - 1];
+            const now = new Date();
+            const startOfCurrentMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+            
+            let baselinePrice = null;
+
+            for (let i = timestamps.length - 1; i >= 0; i--) {
+                const date = new Date(timestamps[i] * 1000);
+                if (date < startOfCurrentMonth) {
+                    baselinePrice = closes[i]; 
+                    break;
+                }
+            }
+
+            if (baselinePrice === null && closes.length > 0) {
+                baselinePrice = closes[0];
+            }
+
+            if (!baselinePrice || !currentPrice) return 0;
+            return (currentPrice - baselinePrice) / baselinePrice;
+
+        } catch (e) {
+            console.error(`Error fetching data for ${cleanTicker}:`, e);
+            return 0;
+        }
+    }
+
+    async function updateWithLiveMarketData(accounts) {
+        const statusDiv = document.getElementById('loading');
+        statusDiv.innerHTML = "Fetching Real-Time Market Data...";
+        
+        const now = new Date();
+        const currentYear = now.getFullYear();
+        const currentMonthVal = now.getMonth() + 1; // 1-12
+        const currentMonthKey = `${currentYear}-${String(currentMonthVal).padStart(2, '0')}`;
+        
+        await Promise.all(accounts.map(async (acc) => {
+            if (acc.data.length === 0) return;
+
+            const startOfThisMonth = new Date(currentYear, currentMonthVal - 1, 1);
+            let baselineEntry = null;
+            for (let i = acc.data.length - 1; i >= 0; i--) {
+                if (acc.data[i].dateObj < startOfThisMonth) {
+                    baselineEntry = acc.data[i];
+                    break;
+                }
+            }
+
+            if (!baselineEntry) return;
+
+            let liveEntry = acc.data.find(d => d.key === currentMonthKey);
+            let isNewRow = false;
+
+            if (!liveEntry) {
+                isNewRow = true;
+                liveEntry = {
+                    key: currentMonthKey,
+                    dateObj: startOfThisMonth,
+                    deposits: 0,
+                    income: 0,
+                    marketGain: 0,
+                    cumulative: baselineEntry.cumulative,
+                    balance: baselineEntry.balance,
+                    invested: baselineEntry.invested,
+                    rawWithdrawals: 0, 
+                    isLive: true
+                };
+            } else {
+                liveEntry.isLive = true; 
+            }
+
+            // Calculation
+            let ticker = liveEntry.invested; 
+            if (acc.id.includes('fidelity')) ticker = 'GOOGL';
+            if (acc.id.includes('boeing')) ticker = 'Boeing (Bonds)';
+            if (acc.id.includes('wells')) ticker = 'Wells Fargo (Cash)';
+
+            const mtdGrowthRate = await getMonthToDatePerformance(ticker);
+            const growthAmount = baselineEntry.balance * mtdGrowthRate;
+
+            liveEntry.marketGain = growthAmount; 
+            liveEntry.balance = baselineEntry.balance + growthAmount + liveEntry.deposits + liveEntry.income;
+            liveEntry.cumulative = baselineEntry.cumulative + growthAmount + liveEntry.income;
+
+            if (isNewRow) {
+                acc.data.push(liveEntry);
+            }
+        }));
+    }
+
+    // ==========================================
+    // LOGIC: SALARY 
     // ==========================================
     function processSalaryData(rows) {
         if (!rows || rows.length < 2) {
@@ -582,7 +685,7 @@
             data: {
                 labels: labels,
                 datasets: [
-                    { label: 'Base Salary', data: data.map(d => d.salary), backgroundColor: '#2c3e50', stack: 'Stack 0' },
+                    { label: 'Base Salary', data: data.map(d => d.salary), backgroundColor: '#5dade2', stack: 'Stack 0' }, // Lighter Blue
                     { label: 'Company Match', data: data.map(d => d.matchAmt), backgroundColor: '#27ae60', stack: 'Stack 0' },
                     { label: 'Education (YTD)', data: data.map(d => d.ytdEdu), backgroundColor: '#e67e22', stack: 'Stack 0' },
                     { label: 'Bonus (YTD)', data: data.map(d => d.ytdBonus), backgroundColor: '#f1c40f', stack: 'Stack 0' }
@@ -593,8 +696,8 @@
                 plugins: {
                     legend: { position: 'top' },
                     datalabels: {
-                        color: (ctx) => ctx.dataset.backgroundColor === '#f1c40f' ? '#000' : '#fff',
-                        font: { weight: 'bold', size: isMobile ? 7 : 10 }, // Mobile Font Fix (Even Smaller)
+                        color: '#000000', // Black text
+                        font: { weight: 'bold', size: isMobile ? 6 : 8 }, // SMALLER TEXT
                         formatter: (val) => val > 500 ? fmtMoneySimple(val) : ''
                     }
                 },
@@ -609,7 +712,7 @@
                 labels: ['Base Salary', 'Match', 'Education (YTD)', 'Bonus (YTD)'],
                 datasets: [{
                     data: [latest.salary, latest.matchAmt, latest.ytdEdu, latest.ytdBonus],
-                    backgroundColor: ['#2c3e50', '#27ae60', '#e67e22', '#f1c40f']
+                    backgroundColor: ['#5dade2', '#27ae60', '#e67e22', '#f1c40f']
                 }]
             },
             options: {
@@ -617,7 +720,8 @@
                 plugins: {
                     legend: { position: 'right' },
                     datalabels: {
-                        color: '#fff', font: { weight: 'bold', size: isMobile ? 9 : 12 }, textAlign: 'center',
+                        color: '#000000', // BLACK TEXT
+                        font: { weight: 'bold', size: isMobile ? 9 : 12 }, textAlign: 'center',
                         formatter: (val, ctx) => {
                             let sum = ctx.dataset.data.reduce((a, b) => a + b, 0);
                             let pct = ((val*100) / sum).toFixed(1) + "%";
@@ -630,10 +734,18 @@
     }
 
     // ==========================================
-    // LOGIC: PROJECTION TABLE RENDERER
+    // LOGIC: PROJECTION
     // ==========================================
+    
+    // UNIFIED UPDATE FUNCTION
+    function updateAllProjections() {
+        updateExtrapolationCards();
+        updateProjectionTable();
+    }
+
     function updateProjectionTable() {
-        const rate = parseFloat(document.getElementById('projectionRateSelect').value);
+        // Read from the SINGLE dropdown
+        const rate = parseFloat(document.getElementById('extrapolationRateSelect').value);
         const data = projectionDataStore[rate];
         const tbody = document.getElementById('projectionTableBody');
         tbody.innerHTML = '';
@@ -659,16 +771,30 @@
         });
     }
 
-    // ==========================================
-    // LOGIC: PROJECTION CHART & CALCULATION
-    // ==========================================
+    function updateExtrapolationCards() {
+        // Read from the SINGLE dropdown
+        const rate = parseFloat(document.getElementById('extrapolationRateSelect').value);
+        const meta = projectionMetadata[rate];
+
+        if (!meta) return;
+
+        document.getElementById('card-nw-label').innerText = `Projected Net Worth (${(rate*100).toFixed(1)}%)`;
+        document.getElementById('proj-nw-card').innerHTML = `<div>${fmtMoneySimple(meta.finalLiquid)} <span style="font-size:0.6em; color:#7f8c8d">Liquid</span></div><div style="font-size:0.8em; margin-top:4px; color:#2c3e50">${fmtMoneySimple(meta.totalNW)} <span style="font-size:0.8em; color:#7f8c8d">Total</span></div>`;
+        
+        document.getElementById('proj-porsche-date').innerText = meta.porscheDate ? meta.porscheDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) : "Not Reached";
+        document.getElementById('proj-porsche-countdown').innerText = formatCountdown(meta.porscheDate);
+        document.getElementById('proj-porsche-sub').innerText = `Estimated Date (${(rate*100).toFixed(1)}% Rtn)`;
+
+        document.getElementById('proj-house-date').innerText = meta.houseDate ? meta.houseDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) : "Not Reached";
+        document.getElementById('proj-house-countdown').innerText = formatCountdown(meta.houseDate);
+        document.getElementById('proj-house-sub').innerText = `Estimated Date (${(rate*100).toFixed(1)}% Rtn)`;
+    }
+
     function renderProjectionChart(startBalance, startInflow, startDateStr) {
         const rates = [0.05, 0.075, 0.10, 0.125, 0.15];
-        
-        // Reset Store
         projectionDataStore = {};
+        projectionMetadata = {};
 
-        // DYNAMIC END YEAR: Current + 25 Years
         const currentYear = new Date().getFullYear();
         const endYear = currentYear + 25;
         
@@ -687,14 +813,15 @@
 
         const datasets = [];
         const colors = ['#B03A2E', '#CA6F1E', '#D4AC0D', '#229954', '#2471A3']; 
-
         const annotations = {
             porscheLine: {
                 type: 'line', yMin: 3, yMax: 3, borderColor: '#F39C12', borderWidth: 4, borderDash: [6, 4],
                 label: { 
                     display: true, content: 'Porsche 911 (-$300k)', position: 'start', 
                     backgroundColor: 'rgba(243, 156, 18, 0.9)', color: 'white',
-                    font: { size: isMobile ? 9 : 12, weight: 'bold' }, yAdjust: -20, xAdjust: 10 
+                    font: { size: isMobile ? 8 : 10, weight: 'bold' },  // SMALLER TEXT
+                    yAdjust: -15, 
+                    xAdjust: 10 
                 }
             },
             houseLine: {
@@ -702,177 +829,103 @@
                 label: { 
                     display: true, content: 'Beach House (-$5M)', position: 'start', 
                     backgroundColor: 'rgba(22, 160, 133, 0.9)', color: 'white',
-                    font: { size: isMobile ? 9 : 12, weight: 'bold' }, yAdjust: -20, xAdjust: 10 
+                    font: { size: isMobile ? 8 : 10, weight: 'bold' }, // SMALLER TEXT
+                    yAdjust: -15, 
+                    xAdjust: 10 
                 }
             }
         };
 
-        let porscheDate10 = null;
-        let houseDate10 = null;
-        let finalBalance10 = 0;
-        let totalNW10 = 0;
-
         rates.forEach((rate, idx) => {
             let balance = startBalance;
             let monthlyContrib = startInflow;
-            let porscheBought = false;
-            let houseBought = false;
-            
-            // Stats Tracking for Table
-            let currentYearStats = { 
-                year: timeline[0].getFullYear(), 
-                startBal: balance, 
-                annualContrib: 0, 
-                annualGrowth: 0 
-            };
+            let porscheBought = false, houseBought = false;
+            let currentYearStats = { year: timeline[0].getFullYear(), startBal: balance, annualContrib: 0, annualGrowth: 0 };
             let yearlyData = [];
+            
+            // Metadata tracking for this rate
+            let porscheDate = null;
+            let houseDate = null;
 
             const dataPoints = timeline.map((date, i) => {
                 const year = date.getFullYear();
-
-                // Detect New Year for Table Aggregation
                 if (year !== currentYearStats.year) {
                     currentYearStats.endBal = balance;
-                    // Fix growth calc: End - Start - Contrib
                     currentYearStats.annualGrowth = currentYearStats.endBal - currentYearStats.startBal - currentYearStats.annualContrib;
                     yearlyData.push({ ...currentYearStats });
-                    
-                    // Reset for next year
-                    currentYearStats = { 
-                        year: year, 
-                        startBal: balance, 
-                        annualContrib: 0, 
-                        annualGrowth: 0 
-                    };
+                    currentYearStats = { year: year, startBal: balance, annualContrib: 0, annualGrowth: 0 };
                 }
 
-                // 1. Contributions Rules (Compounding)
                 if (i > 0) { 
-                    if (date.getMonth() === 0) { monthlyContrib *= 1.06; } // Jan
-                    if (date.getMonth() === 6) { monthlyContrib *= 1.03; } // July
+                    if (date.getMonth() === 0) monthlyContrib *= 1.06;
+                    if (date.getMonth() === 6) monthlyContrib *= 1.03;
                 }
 
-                // 2. Growth
                 const growth = balance * (rate / 12);
                 balance += growth;
-                
-                // 3. Add Contrib
                 balance += monthlyContrib;
-
-                // Track Yearly Stats
                 currentYearStats.annualContrib += monthlyContrib;
 
-                // 4. Milestones
                 if (balance >= 3000000 && !porscheBought) {
-                    balance -= 300000;
-                    porscheBought = true;
-                    // Add Label
-                    annotations[`porsche_${idx}`] = {
-                        type: 'label', xValue: labels[i], yValue: 3,
-                        content: [`${year}`, `${(rate*100).toFixed(1)}%`],
-                        position: 'center', color: colors[idx], font: { weight: 'bold', size: isMobile ? 7 : 10 }, yAdjust: -60 
-                    };
-                    if(rate === 0.10) { porscheDate10 = date; }
+                    balance -= 300000; porscheBought = true;
+                    porscheDate = date;
+                    // Only add labels to chart for select rates to avoid clutter, or add all
+                    annotations[`porsche_${idx}`] = { type: 'label', xValue: labels[i], yValue: 3, content: [`${year}`, `${(rate*100).toFixed(1)}%`], position: 'center', color: colors[idx], font: { weight: 'bold', size: isMobile ? 6 : 8 }, yAdjust: -40 };
                 }
-
                 if (balance >= 10000000 && !houseBought) {
-                    balance -= 5000000;
-                    houseBought = true;
-                    // Add Label
-                    annotations[`house_${idx}`] = {
-                        type: 'label', xValue: labels[i], yValue: 10,
-                        content: [`${year}`, `${(rate*100).toFixed(1)}%`],
-                        position: 'center', color: colors[idx], font: { weight: 'bold', size: isMobile ? 7 : 10 }, yAdjust: -60 
-                    };
-                    if(rate === 0.10) { houseDate10 = date; }
+                    balance -= 5000000; houseBought = true;
+                    houseDate = date;
+                    annotations[`house_${idx}`] = { type: 'label', xValue: labels[i], yValue: 10, content: [`${year}`, `${(rate*100).toFixed(1)}%`], position: 'center', color: colors[idx], font: { weight: 'bold', size: isMobile ? 6 : 8 }, yAdjust: -40 };
                 }
-                
                 return balance / 1000000; 
             });
 
-            // Push final partial year
             currentYearStats.endBal = balance;
             currentYearStats.annualGrowth = currentYearStats.endBal - currentYearStats.startBal - currentYearStats.annualContrib;
             yearlyData.push({ ...currentYearStats });
             
-            // Save to Global Store
             projectionDataStore[rate] = yearlyData;
 
-            if (rate === 0.10) {
-                finalBalance10 = balance;
-                // Calculate Total NW (Liquid + Assets)
-                let assetValue = 0;
-                if (porscheBought) assetValue += 300000;
-                if (houseBought) assetValue += 5000000;
-                totalNW10 = finalBalance10 + assetValue;
-            }
+            let finalBalance = balance;
+            let assetValue = 0;
+            if (porscheBought) assetValue += 300000;
+            if (houseBought) assetValue += 5000000;
+            let totalNW = finalBalance + assetValue;
 
-            datasets.push({
-                label: (rate * 100).toFixed(1) + '%',
-                data: dataPoints,
-                borderColor: colors[idx],
-                backgroundColor: colors[idx],
-                borderWidth: 2,
-                pointRadius: 0,
-                tension: 0.4
-            });
+            projectionMetadata[rate] = {
+                finalLiquid: finalBalance,
+                totalNW: totalNW,
+                porscheDate: porscheDate,
+                houseDate: houseDate
+            };
+
+            datasets.push({ label: (rate * 100).toFixed(1) + '%', data: dataPoints, borderColor: colors[idx], backgroundColor: colors[idx], borderWidth: 2, pointRadius: 0, tension: 0.4 });
         });
 
-        // Initial Render of Table (Default 10%)
-        updateProjectionTable();
-
-        // Update Stats Grid - REPLACING INNER HTML TO SHOW TWO VALUES
-        document.getElementById('proj-nw-10pct').innerHTML = 
-            `<div>${fmtMoneySimple(finalBalance10)} <span style="font-size:0.6em; color:#7f8c8d">Liquid</span></div>` +
-            `<div style="font-size:0.8em; margin-top:4px; color:#2c3e50">${fmtMoneySimple(totalNW10)} <span style="font-size:0.8em; color:#7f8c8d">Total</span></div>`;
-
-        
-        const pMonthYear = porscheDate10 ? porscheDate10.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) : "Not Reached";
-        const hMonthYear = houseDate10 ? houseDate10.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) : "Not Reached";
-
-        document.getElementById('proj-porsche-date').innerText = pMonthYear;
-        document.getElementById('proj-house-date').innerText = hMonthYear;
-        document.getElementById('proj-porsche-countdown').innerText = formatCountdown(porscheDate10);
-        document.getElementById('proj-house-countdown').innerText = formatCountdown(houseDate10);
+        // Initial Update for Cards (Default 10%)
+        updateAllProjections();
 
         new Chart(document.getElementById('projectionChart'), {
-            type: 'line',
-            data: { labels: labels, datasets: datasets },
+            type: 'line', data: { labels: labels, datasets: datasets },
             options: {
-                responsive: true, maintainAspectRatio: false,
-                interaction: { mode: 'index', intersect: false },
-                plugins: {
-                    legend: { display: true, position: 'top' },
-                    tooltip: { callbacks: { label: (ctx) => ctx.dataset.label + ': $' + ctx.raw.toFixed(2) + 'M' } },
-                    annotation: { annotations: annotations }
-                },
-                scales: {
+                responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+                plugins: { legend: { display: true, position: 'top' }, tooltip: { callbacks: { label: (ctx) => ctx.dataset.label + ': $' + ctx.raw.toFixed(2) + 'M' } }, annotation: { annotations: annotations } },
+                scales: { 
                     y: { 
-                        title: { display: true, text: 'Net Worth ($ Millions)' },
-                        ticks: { 
-                            callback: (val) => '$' + val + 'M',
-                            font: { size: isMobile ? 7 : 12 } // Mobile Font Fix (Even Smaller)
-                        }
-                    },
-                    x: {
+                        title: { display: true, text: 'Net Worth ($ Millions)' }, 
+                        ticks: { callback: (val) => '$' + val + 'M', font: { size: isMobile ? 6 : 10 } } // SMALLER TICKS
+                    }, 
+                    x: { 
                         title: { display: true, text: 'Year', font: {weight:'bold'} }, 
-                        ticks: { 
-                            maxTicksLimit: 20,
-                            font: { size: isMobile ? 7 : 12 }, // Mobile Font Fix (Even Smaller)
-                            callback: function(val, index) {
-                                const label = this.getLabelForValue(val);
-                                if (label.includes('Jan')) return label.split(' ')[1]; 
-                                return null;
-                            }
-                        }
-                    }
+                        ticks: { maxTicksLimit: 20, font: { size: isMobile ? 6 : 10 }, callback: function(val) { const label = this.getLabelForValue(val); if (label.includes('Jan')) return label.split(' ')[1]; return null; } } // SMALLER TICKS
+                    } 
                 }
             }
         });
     }
 
     // ==========================================
-    // LOGIC: INVESTMENTS (Existing)
+    // LOGIC: INVESTMENTS PARSING
     // ==========================================
     function parseSheetData(rows) {
         if (!rows) return [];
@@ -882,7 +935,7 @@
             if (cols.length > 8) {
                 const dateStr = cols[0];
                 const deposits = cleanMoney(cols[2]);
-                const withdrawals = cleanMoney(cols[3]);
+                const withdrawals = cleanMoney(cols[3]); // This captures column D
                 const marketGain = cleanMoney(cols[4]);
                 const income = cleanMoney(cols[5]);
                 const cumulative = cleanMoney(cols[7]);
@@ -894,13 +947,14 @@
                 
                 let month = dateParts[0].padStart(2, '0');
                 let year = dateParts[2];
-                
+                // Net transfers for main chart
                 const netTransfers = deposits + withdrawals;
 
                 data.push({
                     key: `${year}-${month}`,
                     dateObj: new Date(year, month - 1, 1),
                     deposits: netTransfers,
+                    rawWithdrawals: withdrawals, // Store raw withdrawals for WF widget
                     marketGain: marketGain,
                     income: income,
                     cumulative: cumulative,
@@ -909,30 +963,34 @@
                 });
             }
         }
+        
+        data.sort((a, b) => a.dateObj - b.dateObj);
         return data;
     }
 
     async function initDashboard() {
         try {
+            document.getElementById('loading').innerHTML = "Loading Sheet Data...";
             const response = await fetch(API_URL);
             const rawData = await response.json();
 
             // 1. Salary
             if (rawData.salary) {
                 processSalaryData(rawData.salary);
-            } else {
-                document.getElementById('stat-salary-base').innerText = "Missing Tab";
             }
 
-            // 2. Investments
+            // 2. Investments - Cleaned Names
             const accounts = [
-                { id: 'wellsFargo', name: 'Wells Fargo (Cash)', data: parseSheetData(rawData.wellsFargo) },
-                { id: 'fidelity', name: 'Fidelity (GOOGL)', data: parseSheetData(rawData.fidelity) },
-                { id: 'boeing', name: 'Boeing (Bonds)', data: parseSheetData(rawData.boeing) },
-                { id: 'vanguardA', name: 'Vanguard Plan A (VIGIX)', data: parseSheetData(rawData.vanguardA) },
-                { id: 'vanguardB', name: 'Vanguard Plan B (VIGIX)', data: parseSheetData(rawData.vanguardB) },
-                { id: 'vanguardUTMA', name: 'Vanguard UTMA (VTSAX)', data: parseSheetData(rawData.vanguardUTMA) }
+                { id: 'wellsFargo', name: 'Wells Fargo', data: parseSheetData(rawData.wellsFargo) },
+                { id: 'fidelity', name: 'Fidelity', data: parseSheetData(rawData.fidelity) },
+                { id: 'boeing', name: 'Boeing', data: parseSheetData(rawData.boeing) },
+                { id: 'vanguardA', name: 'Vanguard Plan A', data: parseSheetData(rawData.vanguardA) },
+                { id: 'vanguardB', name: 'Vanguard Plan B', data: parseSheetData(rawData.vanguardB) },
+                { id: 'vanguardUTMA', name: 'Vanguard UTMA', data: parseSheetData(rawData.vanguardUTMA) }
             ];
+
+            // 3. APPLY REAL-TIME MARKET DATA
+            await updateWithLiveMarketData(accounts);
 
             processAndRender(accounts);
             document.getElementById('loading').style.display = 'none';
@@ -943,24 +1001,107 @@
         }
     }
 
+    function createSnapshotTable(accounts, alignedData, index, tableId) {
+        const body = document.getElementById(tableId);
+        body.innerHTML = '';
+        
+        if (index < 0) {
+            body.innerHTML = '<tr><td colspan="7" style="text-align:center">No Data Available for this period</td></tr>';
+            return;
+        }
+
+        accounts.forEach(acc => {
+            const entry = alignedData[acc.id][index];
+            if (entry.balance < 0.01) return;
+
+            const tr = document.createElement('tr');
+            if(entry.isLive) tr.style.backgroundColor = "#fef9e7"; 
+
+            const totalNetDep = entry.balance - entry.cumulative;
+            let roiPct = 0;
+            if (totalNetDep !== 0) { roiPct = (entry.cumulative / totalNetDep) * 100; }
+            const roiColor = roiPct >= 0 ? 'text-green' : 'text-red';
+            const roiText = (roiPct >= 0 ? '+' : '') + roiPct.toFixed(1) + '%';
+            
+            const liveTag = entry.isLive ? '<span style="background:red; color:white; font-size:9px; padding:1px 3px; border-radius:3px; margin-left:5px; vertical-align:middle;">LIVE</span>' : '';
+
+            tr.innerHTML = `
+                <td>
+                    <span class="account-name">${acc.name}${liveTag}</span>
+                    <span class="ticker-tag">${entry.invested}</span>
+                </td>
+                <td style="font-weight:bold">${fmtMoney(entry.balance)}</td>
+                <td class="${entry.marketGain >= 0 ? 'text-green' : 'text-red'}">
+                    ${entry.marketGain >= 0 ? '+' : ''}${fmtMoney(entry.marketGain + entry.income)}
+                </td>
+                <td>
+                    ${fmtMoney(entry.deposits + entry.income)}
+                </td>
+                <td>${fmtMoney(totalNetDep)}</td>
+                <td style="font-weight:bold" class="${entry.cumulative >= 0 ? 'text-green' : 'text-red'}">
+                    ${fmtMoney(entry.cumulative)}
+                </td>
+                <td style="font-weight:bold" class="${roiColor}">${roiText}</td>
+            `;
+            body.appendChild(tr);
+        });
+    }
+
+    function renderWellsFargoWidget(accounts) {
+        const wf = accounts.find(a => a.id === 'wellsFargo');
+        if (!wf) return;
+        
+        const relevantData = wf.data.filter(d => !d.isLive).slice(-24);
+        
+        const labels = relevantData.map(d => d.key);
+        const values = relevantData.map(d => Math.abs(d.rawWithdrawals)); 
+
+        new Chart(document.getElementById('wfWithdrawalChart'), {
+            type: 'bar',
+            plugins: [ChartDataLabels],
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Monthly Withdrawals',
+                    data: values,
+                    backgroundColor: '#e74c3c',
+                    borderRadius: 2,
+                    barPercentage: 0.7 
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    datalabels: {
+                        color: '#2c3e50',
+                        anchor: 'end',
+                        align: 'top',
+                        font: { weight: 'bold', size: 9 },
+                        formatter: (val) => val > 200 ? fmtMoneySimple(val) : '' // Only show if significant
+                    }
+                },
+                scales: {
+                    y: { beginAtZero: true, grid: { color: '#f0f0f0' }, ticks: { font: { size: 9 } } },
+                    x: { grid: { display: false }, ticks: { font: { size: 8 }, maxRotation: 90, minRotation: 90 } }
+                }
+            }
+        });
+    }
+
     function processAndRender(accounts) {
         const allMonths = new Set();
         accounts.forEach(acc => acc.data.forEach(d => allMonths.add(d.key)));
         const sortedMonths = Array.from(allMonths).sort();
-        
+
         const alignedData = {};
-        const globalTotals = {
-            balance: [], gainLoss: [], income: [], deposits: [], cumulative: []
-        };
+        const globalTotals = { balance: [], gainLoss: [], income: [], deposits: [], cumulative: [] };
         
         accounts.forEach(acc => alignedData[acc.id] = []);
 
         sortedMonths.forEach(monthKey => {
-            let monthBalance = 0;
-            let monthGain = 0;
-            let monthIncome = 0;
-            let monthDeposits = 0;
-            let monthCumulative = 0;
+            let monthBalance = 0, monthGain = 0, monthIncome = 0, monthDeposits = 0, monthCumulative = 0;
 
             accounts.forEach(acc => {
                 const entry = acc.data.find(d => d.key === monthKey);
@@ -972,7 +1113,7 @@
                     monthDeposits += entry.deposits;
                     monthCumulative += entry.cumulative;
                 } else {
-                    alignedData[acc.id].push({ balance: 0, marketGain: 0, income: 0, deposits: 0, cumulative: 0, invested: '-' });
+                    alignedData[acc.id].push({ balance: 0, marketGain: 0, income: 0, deposits: 0, cumulative: 0, invested: '-', rawWithdrawals: 0 });
                 }
             });
 
@@ -984,18 +1125,20 @@
         });
 
         const lastIndex = sortedMonths.length - 1;
-        document.getElementById('latest-date-display').innerText = "Data as of " + sortedMonths[lastIndex];
+        document.getElementById('latest-date-display').innerText = "Data as of " + sortedMonths[lastIndex] + " (LIVE)";
+        document.getElementById('latest-date-display').style.color = "#c0392b"; 
+        
         document.getElementById('stat-networth').innerText = fmtMoney(globalTotals.balance[lastIndex]);
         
         const totalGain = globalTotals.cumulative[lastIndex];
         const gainEl = document.getElementById('stat-lifetime-gain');
         gainEl.innerText = (totalGain >= 0 ? '+' : '') + fmtMoney(totalGain);
-        gainEl.classList.add(totalGain >= 0 ? 'text-green' : 'text-red');
+        gainEl.className = 'stat-value ' + (totalGain >= 0 ? 'text-green' : 'text-red');
 
         const monthlyPL = globalTotals.gainLoss[lastIndex];
         const plEl = document.getElementById('stat-monthly-pl');
         plEl.innerText = (monthlyPL >= 0 ? '+' : '') + fmtMoney(monthlyPL);
-        plEl.classList.add(monthlyPL >= 0 ? 'text-green' : 'text-red');
+        plEl.className = 'stat-value ' + (monthlyPL >= 0 ? 'text-green' : 'text-red');
 
         const lastIncome = globalTotals.income[lastIndex];
         const lastDeposits = globalTotals.deposits[lastIndex];
@@ -1004,17 +1147,12 @@
         document.getElementById('stat-monthly-inflow').innerText = fmtMoney(totalInflow);
         document.getElementById('stat-monthly-inflow-sub').innerHTML = `Income: ${fmtMoney(lastIncome)} <span style="margin:0 4px; color:#ccc">|</span> Net Dep: ${fmtMoney(lastDeposits)}`;
 
-        // --- TRIGGER PROJECTION HERE (UPDATED) ---
-        // Logic: Use Previous Month's Inflow (if available) as baseline for projection
-        let projectionInflow = totalInflow; // Default fallback
-        if (lastIndex > 0) {
-            projectionInflow = globalTotals.income[lastIndex - 1] + globalTotals.deposits[lastIndex - 1];
-        }
+        let projectionInflow = totalInflow; 
+        if (lastIndex > 0) projectionInflow = globalTotals.income[lastIndex - 1] + globalTotals.deposits[lastIndex - 1];
+        
         renderProjectionChart(globalTotals.balance[lastIndex], projectionInflow, sortedMonths[lastIndex]);
 
-        // === FIX: DEFINE PALETTE & STACKED DATASETS HERE (EARLY) ===
         const palette = ['#3498db', '#9b59b6', '#2ecc71', '#e67e22', '#f1c40f', '#e74c3c'];
-        
         const stackedDatasets = accounts.map((acc, index) => {
             const color = palette[index % palette.length];
             return {
@@ -1024,63 +1162,14 @@
             };
         });
         
-        const snapshotBody = document.getElementById('snapshotBody');
-        snapshotBody.innerHTML = '';
-        accounts.forEach(acc => {
-            const latest = alignedData[acc.id][lastIndex];
-            
-            // Get previous month data for the breakdown columns
-            const prevIndex = lastIndex - 1;
-            const prev = (prevIndex >= 0) ? alignedData[acc.id][prevIndex] : null;
+        // RENDER TABLES (Live and Previous)
+        createSnapshotTable(accounts, alignedData, lastIndex, 'snapshotBody');
+        createSnapshotTable(accounts, alignedData, lastIndex - 1, 'prevSnapshotBody');
+        
+        // RENDER WF WIDGET
+        renderWellsFargoWidget(accounts);
 
-            // FILTER: Skip if balance is effectively zero
-            if (latest.balance < 0.01) return;
-
-            // Calculate Previous Month Metrics
-            let prevGain = 0;
-            let prevInflow = 0;
-            let prevIncome = 0;
-            let prevNetDep = 0;
-
-            if (prev) {
-                prevGain = prev.marketGain + prev.income;
-                prevIncome = prev.income;
-                prevNetDep = prev.deposits;
-                prevInflow = prevIncome + prevNetDep;
-            }
-
-            const tr = document.createElement('tr');
-            
-            // For Total Return & ROI, we still use latest cumulative
-            const totalNetDep = latest.balance - latest.cumulative;
-            let roiPct = 0;
-            if (totalNetDep !== 0) { roiPct = (latest.cumulative / totalNetDep) * 100; }
-            const roiColor = roiPct >= 0 ? 'text-green' : 'text-red';
-            const roiText = (roiPct >= 0 ? '+' : '') + roiPct.toFixed(1) + '%';
-
-            tr.innerHTML = `
-                <td>
-                    <span class="account-name">${acc.name}</span>
-                    <span class="ticker-tag">${latest.invested}</span>
-                </td>
-                <td style="font-weight:bold">${fmtMoney(latest.balance)}</td>
-                <td class="${prevGain >= 0 ? 'text-green' : 'text-red'}">
-                    ${prevGain >= 0 ? '+' : ''}${fmtMoney(prevGain)}
-                </td>
-                <td>
-                    ${fmtMoney(prevInflow)}
-                    <span class="sub-text">(${fmtMoneySimple(prevIncome)} Inc + ${fmtMoneySimple(prevNetDep)} Net Dep)</span>
-                </td>
-                <td>${fmtMoney(totalNetDep)}</td>
-                <td style="font-weight:bold" class="${latest.cumulative >= 0 ? 'text-green' : 'text-red'}">
-                    ${fmtMoney(latest.cumulative)}
-                </td>
-                <td style="font-weight:bold" class="${roiColor}">${roiText}</td>
-            `;
-            snapshotBody.appendChild(tr);
-        });
-
-        // Charts
+        // CHARTS
         const allocation = {};
         accounts.forEach(acc => {
             const latest = alignedData[acc.id][lastIndex];
@@ -1094,88 +1183,43 @@
         const totalPortfolio = allocValues.reduce((a, b) => a + b, 0);
 
         new Chart(document.getElementById('allocationChart'), {
-            type: 'doughnut',
-            plugins: [ChartDataLabels],
+            type: 'doughnut', plugins: [ChartDataLabels],
             data: { labels: allocLabels, datasets: [{ data: allocValues, backgroundColor: palette }] },
-            options: {
-                maintainAspectRatio: false, layout: { padding: 80 },
-                plugins: {
-                    legend: { display: false },
-                    tooltip: { callbacks: { label: (ctx) => ctx.label + ': ' + fmtMoney(ctx.raw) + ' (' + ((ctx.raw/totalPortfolio)*100).toFixed(1) + '%)' } },
-                    datalabels: {
-                        color: '#2c3e50', anchor: 'end', align: 'end', offset: 10,
-                        formatter: (val, ctx) => (val/totalPortfolio > 0.01) ? ctx.chart.data.labels[ctx.dataIndex] + '\n' + fmtMoneySimple(val) : ''
-                    }
-                }
-            }
+            options: { maintainAspectRatio: false, layout: { padding: 80 }, plugins: { legend: { display: false }, tooltip: { callbacks: { label: (ctx) => ctx.label + ': ' + fmtMoney(ctx.raw) + ' (' + ((ctx.raw/totalPortfolio)*100).toFixed(1) + '%)' } }, datalabels: { color: '#2c3e50', anchor: 'end', align: 'end', offset: 10, formatter: (val, ctx) => (val/totalPortfolio > 0.01) ? ctx.chart.data.labels[ctx.dataIndex] + '\n' + fmtMoneySimple(val) : '' } } }
         });
 
         new Chart(document.getElementById('balanceChart'), {
-            type: 'line',
-            plugins: [ChartDataLabels],
+            type: 'line', plugins: [ChartDataLabels],
             data: { labels: sortedMonths, datasets: stackedDatasets },
             options: {
-                responsive: true, maintainAspectRatio: false, 
-                layout: { padding: { right: isMobile ? 90 : 150 } }, // Responsive Padding Fix
-                interaction: { mode: 'index', intersect: false },
-                plugins: {
-                    legend: {
-                        // FIX: Left-align legend on mobile for straight lines
-                        align: isMobile ? 'start' : 'center',
-                        position: 'top',
-                        labels: { boxWidth: isMobile ? 12 : 40, padding: 10 }
-                    },
-                    datalabels: {
-                        align: 'right', anchor: 'end', offset: 5, backgroundColor: 'white', borderColor: (ctx) => ctx.dataset.borderColor,
-                        borderWidth: 1, borderRadius: 4, padding: isMobile ? 4 : 6, color: 'black', 
-                        font: { weight: 'bold', size: isMobile ? 9 : 10 }, // Mobile Font Fix
-                        formatter: (val, ctx) => (ctx.dataIndex === ctx.dataset.data.length - 1 && val > 500) ? ctx.dataset.label + '\n' + fmtMoneySimple(val) : null,
-                        display: (ctx) => ctx.dataIndex === ctx.dataset.data.length - 1
-                    }
-                },
+                responsive: true, maintainAspectRatio: false, layout: { padding: { right: isMobile ? 90 : 150 } }, interaction: { mode: 'index', intersect: false },
+                plugins: { legend: { align: isMobile ? 'start' : 'center', position: 'top', labels: { boxWidth: isMobile ? 12 : 40, padding: 10 } }, datalabels: { align: 'right', anchor: 'end', offset: 5, backgroundColor: 'white', borderColor: (ctx) => ctx.dataset.borderColor, borderWidth: 1, borderRadius: 4, padding: isMobile ? 4 : 6, color: 'black', font: { weight: 'bold', size: isMobile ? 9 : 10 }, formatter: (val, ctx) => (ctx.dataIndex === ctx.dataset.data.length - 1 && val > 500) ? ctx.dataset.label + '\n' + fmtMoneySimple(val) : null, display: (ctx) => ctx.dataIndex === ctx.dataset.data.length - 1 } },
                 scales: { y: { beginAtZero: true, stacked: true } }
             }
         });
 
         new Chart(document.getElementById('plChart'), {
             type: 'bar',
-            data: {
-                labels: sortedMonths,
-                datasets: [{ label: 'Monthly Net Gain/Loss', data: globalTotals.gainLoss, backgroundColor: globalTotals.gainLoss.map(v => v >= 0 ? '#27ae60' : '#c0392b') }]
-            },
-            options: {
-                responsive: true, maintainAspectRatio: false,
-                plugins: { legend: { display: false } }, // Legend Hidden
-                scales: { y: { grid: { color: '#f0f0f0' } }, x: { grid: { display: false } } }
-            }
+            data: { labels: sortedMonths, datasets: [{ label: 'Monthly Net Gain/Loss', data: globalTotals.gainLoss, backgroundColor: globalTotals.gainLoss.map(v => v >= 0 ? '#27ae60' : '#c0392b') }] },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { grid: { color: '#f0f0f0' } }, x: { grid: { display: false } } } }
         });
 
         const historyHeader = document.getElementById('historyHeader');
         historyHeader.innerHTML = '<th>Month</th><th>Total Balance</th><th>Total Gain/Loss</th>';
         accounts.forEach(acc => {
             const th = document.createElement('th');
-            th.innerText = acc.name.split(' ')[0]; 
-            th.style.fontSize = "0.8em";
-            historyHeader.appendChild(th);
+            th.innerText = acc.name.split(' ')[0]; th.style.fontSize = "0.8em"; historyHeader.appendChild(th);
         });
 
         const historyBody = document.getElementById('historyBody');
         historyBody.innerHTML = '';
         for (let i = sortedMonths.length - 1; i >= 0; i--) {
             const tr = document.createElement('tr');
-            tr.innerHTML = `
-                <td>${sortedMonths[i]}</td>
-                <td style="font-weight:bold">${fmtMoney(globalTotals.balance[i])}</td>
-                <td class="${globalTotals.gainLoss[i] >= 0 ? 'text-green' : 'text-red'}">
-                    ${globalTotals.gainLoss[i] >= 0 ? '+' : ''}${fmtMoney(globalTotals.gainLoss[i])}
-                </td>
-            `;
+            tr.innerHTML = `<td>${sortedMonths[i]}</td><td style="font-weight:bold">${fmtMoney(globalTotals.balance[i])}</td><td class="${globalTotals.gainLoss[i] >= 0 ? 'text-green' : 'text-red'}">${globalTotals.gainLoss[i] >= 0 ? '+' : ''}${fmtMoney(globalTotals.gainLoss[i])}</td>`;
             accounts.forEach(acc => {
                 const val = alignedData[acc.id][i].balance;
                 const td = document.createElement('td');
-                td.innerText = val ? fmtMoney(val) : '-';
-                td.style.fontSize = "0.85em";
-                tr.appendChild(td);
+                td.innerText = val ? fmtMoney(val) : '-'; td.style.fontSize = "0.85em"; tr.appendChild(td);
             });
             historyBody.appendChild(tr);
         }
@@ -1183,28 +1227,8 @@
 
     // --- TRADINGVIEW WIDGET ---
     new TradingView.widget({
-        "container_id": "tv-widget-container",
-        "autosize": true,
-        "symbol": "NASDAQ:GOOGL",
-        "interval": "D",
-        "timezone": "America/New_York",
-        "theme": "light",
-        "style": "1",
-        "locale": "en",
-        "toolbar_bg": "#f1f3f6",
-        "enable_publishing": false,
-        "allow_symbol_change": true,
-        "save_image": false,
-        "details": true,
-        "hotlist": false,
-        "calendar": false,
-        "watchlist": [
-            "NASDAQ:GOOGL",
-            "NASDAQ:VIGIX",
-            "NASDAQ:VTSAX",
-            "NASDAQ:BND", // Boeing Bonds
-            "AMEX:BIL"    // Wells Fargo Cash Proxy
-        ]
+        "container_id": "tv-widget-container", "autosize": true, "symbol": "NASDAQ:GOOGL", "interval": "D", "timezone": "America/New_York", "theme": "light", "style": "1", "locale": "en", "toolbar_bg": "#f1f3f6", "enable_publishing": false, "allow_symbol_change": true, "save_image": false, "details": true, "hotlist": false, "calendar": false,
+        "watchlist": ["NASDAQ:GOOGL", "NASDAQ:VIGIX", "NASDAQ:VTSAX", "NASDAQ:BND", "AMEX:BIL"]
     });
 
     initDashboard();
