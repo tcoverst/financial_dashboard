@@ -1124,7 +1124,7 @@
             // 3. APPLY REAL-TIME MARKET DATA (Initial)
             await updateWithLiveMarketData(accounts, false);
 
-            processAndRender(accounts);
+            processAndRender(accounts, false);
             
             // Hide loading
             document.getElementById('loading').style.opacity = '0';
@@ -1151,7 +1151,7 @@
         setInterval(async () => {
             console.log("Refreshing Market Data...");
             await updateWithLiveMarketData(globalAccountsData, true); // Silent = true
-            processAndRender(globalAccountsData);
+            processAndRender(globalAccountsData, true); // Silent render
             refreshTimer = 60;
         }, 60000);
     }
@@ -1217,7 +1217,7 @@
         });
     }
 
-    function renderWellsFargoWidget(accounts) {
+    function renderWellsFargoWidget(accounts, isSilent = false) {
         const wf = accounts.find(a => a.id === 'wellsFargo');
         if (!wf) return;
         
@@ -1242,6 +1242,7 @@
                 }]
             },
             options: {
+                animation: isSilent ? false : {}, // Disable animation if silent update
                 responsive: true,
                 maintainAspectRatio: false,
                 plugins: {
@@ -1280,10 +1281,10 @@
             container.appendChild(label);
         });
 
-        updateIncomeAnalysis();
+        updateIncomeAnalysis(false); // Initial load has animation
     }
 
-    function updateIncomeAnalysis() {
+    function updateIncomeAnalysis(isSilent = false) {
         const checkboxes = document.querySelectorAll('#income-filter-container input[type="checkbox"]');
         const selectedIds = Array.from(checkboxes).filter(cb => cb.checked).map(cb => cb.value);
 
@@ -1326,6 +1327,7 @@
                 }]
             },
             options: {
+                animation: isSilent ? false : {}, // Disable animation if silent update
                 responsive: true, maintainAspectRatio: false,
                 plugins: {
                     legend: { display: false },
@@ -1346,7 +1348,7 @@
         });
     }
 
-    function processAndRender(accounts) {
+    function processAndRender(accounts, isSilent = false) {
         const allMonths = new Set();
         accounts.forEach(acc => acc.data.forEach(d => allMonths.add(d.key)));
         const sortedMonths = Array.from(allMonths).sort();
@@ -1427,10 +1429,12 @@
         createSnapshotTable(accounts, alignedData, lastIndex - 1, 'prevSnapshotBody');
         
         // RENDER WF WIDGET
-        renderWellsFargoWidget(accounts);
+        renderWellsFargoWidget(accounts, isSilent);
 
         // INITIALIZE INCOME ANALYSIS (New)
         initIncomeAnalysis(accounts);
+        // Explicitly update chart for refresh cycles (init only runs once)
+        updateIncomeAnalysis(isSilent);
 
         // CHARTS
         const allocation = {};
@@ -1449,7 +1453,9 @@
         charts.allocation = new Chart(document.getElementById('allocationChart'), {
             type: 'doughnut', plugins: [ChartDataLabels],
             data: { labels: allocLabels, datasets: [{ data: allocValues, backgroundColor: palette }] },
-            options: { maintainAspectRatio: false, layout: { padding: 80 }, plugins: { legend: { display: false }, tooltip: { callbacks: { label: (ctx) => ctx.label + ': ' + fmtMoney(ctx.raw) + ' (' + ((ctx.raw/totalPortfolio)*100).toFixed(1) + '%)' } }, datalabels: { color: '#2c3e50', anchor: 'end', align: 'end', offset: 10, formatter: (val, ctx) => (val/totalPortfolio > 0.01) ? ctx.chart.data.labels[ctx.dataIndex] + '\n' + fmtMoneySimple(val) : '' } } }
+            options: { 
+                animation: isSilent ? false : {}, // Disable animation if silent update
+                maintainAspectRatio: false, layout: { padding: 80 }, plugins: { legend: { display: false }, tooltip: { callbacks: { label: (ctx) => ctx.label + ': ' + fmtMoney(ctx.raw) + ' (' + ((ctx.raw/totalPortfolio)*100).toFixed(1) + '%)' } }, datalabels: { color: '#2c3e50', anchor: 'end', align: 'end', offset: 10, formatter: (val, ctx) => (val/totalPortfolio > 0.01) ? ctx.chart.data.labels[ctx.dataIndex] + '\n' + fmtMoneySimple(val) : '' } } }
         });
 
         if (charts.balance) charts.balance.destroy();
@@ -1457,6 +1463,7 @@
             type: 'line', plugins: [ChartDataLabels],
             data: { labels: sortedMonths, datasets: stackedDatasets },
             options: {
+                animation: isSilent ? false : {}, // Disable animation if silent update
                 responsive: true, maintainAspectRatio: false, layout: { padding: { right: isMobile ? 90 : 150 } }, interaction: { mode: 'index', intersect: false },
                 plugins: { legend: { align: isMobile ? 'start' : 'center', position: 'top', labels: { boxWidth: isMobile ? 12 : 40, padding: 10 } }, datalabels: { align: 'right', anchor: 'end', offset: 5, backgroundColor: 'white', borderColor: (ctx) => ctx.dataset.borderColor, borderWidth: 1, borderRadius: 4, padding: isMobile ? 4 : 6, color: 'black', font: { weight: 'bold', size: isMobile ? 9 : 10 }, formatter: (val, ctx) => (ctx.dataIndex === ctx.dataset.data.length - 1 && val > 500) ? ctx.dataset.label + '\n' + fmtMoneySimple(val) : null, display: (ctx) => ctx.dataIndex === ctx.dataset.data.length - 1 } },
                 scales: { y: { beginAtZero: true, stacked: true } }
@@ -1467,7 +1474,10 @@
         charts.pl = new Chart(document.getElementById('plChart'), {
             type: 'bar',
             data: { labels: sortedMonths, datasets: [{ label: 'Monthly Net Gain/Loss', data: globalTotals.gainLoss, backgroundColor: globalTotals.gainLoss.map(v => v >= 0 ? '#27ae60' : '#c0392b') }] },
-            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { grid: { color: '#f0f0f0' } }, x: { grid: { display: false } } } }
+            options: { 
+                animation: isSilent ? false : {}, // Disable animation if silent update
+                responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { grid: { color: '#f0f0f0' } }, x: { grid: { display: false } } } 
+            }
         });
 
         const historyHeader = document.getElementById('historyHeader');
