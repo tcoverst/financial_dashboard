@@ -144,9 +144,7 @@
             border: 1px solid var(--border-color);
             backdrop-filter: blur(5px);
             text-align: right;
-            
-            /* Fluid Animation Settings - JS now controls the 'transition' property dynamically */
-            will-change: top, left;
+            will-change: top, left; /* Performance Optimization */
         }
 
         /* UTILITY: DISABLE TRANSITION FOR IMMEDIATE UPDATES (used during theme switch) */
@@ -740,7 +738,17 @@
     // ==========================================
     // FLUID STATUS BOX POSITIONING LOGIC
     // ==========================================
-    let isDockedState = false; // Add state tracking outside function
+    let isDockedState = false; 
+    let scrollRaf = null;
+
+    function onScroll() {
+        if (!scrollRaf) {
+            scrollRaf = requestAnimationFrame(() => {
+                updateStatusPosition();
+                scrollRaf = null;
+            });
+        }
+    }
 
     function updateStatusPosition() {
         const floater = document.getElementById('status-floater');
@@ -748,14 +756,11 @@
         if (!floater || !placeholder) return;
 
         const scrollY = window.scrollY;
-        const threshold = 50; // Scroll amount before docking starts
+        const threshold = 50; 
         const isMobile = window.innerWidth <= 768;
 
-        // "Docked" Coordinates
         const dockTop = isMobile ? 70 : 20;
         const dockRight = isMobile ? 10 : 80;
-        
-        // Ensure offsetWidth is valid before calc
         const fWidth = floater.offsetWidth || 200; 
         const dockLeft = window.innerWidth - dockRight - fWidth;
 
@@ -766,9 +771,9 @@
             floater.style.top = dockTop + 'px';
             floater.style.left = dockLeft + 'px';
             
-            // Enable transition when docking or resizing in dock mode
             if (!isDockedState) {
-                floater.style.transition = 'top 0.6s cubic-bezier(0.16, 1, 0.3, 1), left 0.6s cubic-bezier(0.16, 1, 0.3, 1)';
+                // Animate INTO the docked position
+                floater.style.transition = 'top 0.5s cubic-bezier(0.2, 0.8, 0.2, 1), left 0.5s cubic-bezier(0.2, 0.8, 0.2, 1)';
                 isDockedState = true;
                 floater.classList.add('mobile-dock');
             }
@@ -780,28 +785,30 @@
             floater.style.left = (pRect.left + (isMobile ? 0 : 0)) + 'px';
             
             if (isDockedState) {
-                // Just switching back to embedded: Keep transition for the return animation
-                floater.style.transition = 'top 0.6s cubic-bezier(0.16, 1, 0.3, 1), left 0.6s cubic-bezier(0.16, 1, 0.3, 1)';
+                // SWITCHING BACK: Snap instantly to feel "sticky" and rigid
+                floater.style.transition = 'none';
                 isDockedState = false;
                 floater.classList.remove('mobile-dock');
             } else {
-                // Scrolling within embedded mode: DISABLE transition to prevent lag/float-away
+                // SCROLLING: Keep transition disabled to track perfectly
                 floater.style.transition = 'none';
             }
         }
     }
 
-    // Bind Scroll and Resize events
-    window.addEventListener('scroll', updateStatusPosition);
-    window.addEventListener('resize', updateStatusPosition);
-    // Initial Call - Wait for layout to settle
-    window.addEventListener('DOMContentLoaded', () => {
-        setTimeout(updateStatusPosition, 100); 
-    });
-    // Extra safety for full load (images/fonts)
-    window.onload = () => {
+    // Initialization Safety Check
+    function initStatusFloater() {
+        updateStatusPosition();
+        // Recalculate after a short delay to ensure layout/fonts are settled
         setTimeout(updateStatusPosition, 100);
-    };
+        setTimeout(updateStatusPosition, 500);
+    }
+
+    // Bind Events
+    window.addEventListener('scroll', onScroll);
+    window.addEventListener('resize', onScroll);
+    window.addEventListener('DOMContentLoaded', initStatusFloater);
+    window.onload = initStatusFloater;
 
 
     // ==========================================
@@ -831,23 +838,11 @@
             processAndRender(globalAccountsData, true);
         }
         
-        // FIX: Synchronize status box movement with CSS transition loop
+        // Temporarily disable transition during theme switch to prevent floating
         const floater = document.getElementById('status-floater');
-        if(floater) floater.classList.add('no-transition'); // Disable CSS transition for immediate tracking
+        if(floater) floater.style.transition = 'none';
         
-        const startTime = performance.now();
-        const duration = 600; // slightly longer than CSS transition
-
-        function track() {
-            const now = performance.now();
-            updateStatusPosition();
-            if (now - startTime < duration) {
-                requestAnimationFrame(track);
-            } else {
-                if(floater) floater.classList.remove('no-transition'); // Re-enable CSS transition
-            }
-        }
-        requestAnimationFrame(track);
+        updateStatusPosition();
     }
 
     function hexToRgba(hex, alpha) {
