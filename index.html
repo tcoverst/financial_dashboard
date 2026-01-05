@@ -155,14 +155,6 @@
             transition: none !important;
         }
 
-        /* Placeholder in header to reserve space */
-        #status-placeholder {
-            width: 100%;
-            height: 50px;
-            margin-top: 15px;
-            pointer-events: none;
-        }
-        
         /* THEME TOGGLE BUTTON */
         .theme-toggle {
             position: fixed;
@@ -192,12 +184,43 @@
             padding: 20px;
             border-radius: 8px;
             box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            
+            /* Flexbox Layout for Responsive Status Box */
             display: flex;
+            flex-direction: row; /* Default: Laptop Mode (Side-by-Side) */
             justify-content: space-between;
-            align-items: flex-start; 
-            flex-direction: column; 
-            gap: 5px;
+            align-items: center;
+            gap: 15px;
+            flex-wrap: wrap;
         }
+
+        /* Title Container */
+        header > div:first-child {
+            /* Takes natural width */
+        }
+
+        /* Status Box Placeholder - Desktop Size */
+        #status-placeholder {
+            width: 260px; /* Approx width of the status box to reserve space */
+            height: 50px;
+            pointer-events: none;
+            flex-shrink: 0;
+        }
+        
+        .section-header {
+            margin: 40px 0 20px 0;
+            padding-bottom: 10px;
+            border-bottom: 2px solid var(--border-color);
+            color: var(--primary);
+            font-size: 1.5em;
+            display: flex;
+            align-items: center;
+            justify-content: space-between; 
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        h1 { margin: 0; font-size: 24px; color: var(--primary); line-height: 1.2; }
+        .subtitle { color: #7f8c8d; font-size: 0.9em; margin-top: 5px; }
         
         /* Stats Grid */
         .stats-grid {
@@ -365,7 +388,22 @@
             /* Mobile adjustment for status if docked */
             .status-floater.mobile-dock { top: 70px !important; left: auto !important; right: 10px !important; padding: 6px 12px; }
             
-            header { padding: 15px; }
+            header { 
+                padding: 15px; 
+                flex-direction: column; /* Mobile Mode: Stack Vertical */
+                align-items: flex-start;
+            }
+            
+            header > div:first-child {
+                width: 100%;
+            }
+
+            #status-placeholder {
+                width: 100%; /* Full width for mobile */
+                height: 50px;
+                margin-top: 10px;
+            }
+
             .stats-grid { grid-template-columns: 1fr 1fr; gap: 10px; } 
             .stat-card { padding: 12px 10px; }
             .stat-value { font-size: 1.4em; }
@@ -399,7 +437,7 @@
 
 <div class="container">
     <header>
-        <div style="width:100%">
+        <div>
             <h1>Financial Dashboard</h1>
             <div class="subtitle">Investment Portfolio & Compensation Analysis</div>
         </div>
@@ -1557,8 +1595,7 @@
             },
             options: {
                 animation: isSilent ? false : {}, // Disable animation if silent update
-                responsive: true,
-                maintainAspectRatio: false,
+                responsive: true, maintainAspectRatio: false,
                 plugins: {
                     legend: { display: false },
                     datalabels: {
