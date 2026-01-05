@@ -135,7 +135,7 @@
         /* FLOATING STATUS BOX */
         .status-floater {
             position: fixed;
-            /* Top/Left set dynamically by JS */
+            /* In embedded mode, top/left are set by JS */
             background: var(--card-bg);
             padding: 10px 15px;
             border-radius: 8px;
@@ -145,9 +145,16 @@
             backdrop-filter: blur(5px);
             text-align: right;
             
-            /* FIX: Removed 'top' from transition to allow instant scroll tracking */
-            transition: left 0.6s cubic-bezier(0.16, 1, 0.3, 1);
-            will-change: top, left;
+            /* Smoother transitions */
+            transition: top 0.3s ease-out, left 0.3s ease-out, right 0.3s ease-out;
+            will-change: top, left, right;
+        }
+
+        /* DOCKED STATE (CSS Controlled) */
+        .status-floater.docked {
+            top: 20px !important;
+            right: 80px !important;
+            left: auto !important; /* Clear inline left style */
         }
 
         /* UTILITY: DISABLE TRANSITION FOR IMMEDIATE UPDATES (used during theme switch) */
@@ -386,7 +393,12 @@
         @media (max-width: 768px) {
             body { padding: 5px; }
             /* Mobile adjustment for status if docked */
-            .status-floater.mobile-dock { top: 70px !important; left: auto !important; right: 10px !important; padding: 6px 12px; }
+            .status-floater.docked {
+                top: 15px !important;
+                right: 55px !important; /* Leave room for theme toggle */
+                left: auto !important;
+                padding: 6px 12px;
+            }
             
             header { 
                 padding: 15px; 
@@ -427,7 +439,7 @@
     </svg>
 </div>
 
-<div id="status-floater" class="status-floater" style="top: -100px; left: 0;">
+<div id="status-floater" class="status-floater" style="top: 0; left: 0; opacity: 0;">
     <div style="font-size: 0.9em; font-weight: bold; color: var(--danger);" id="latest-date-display">
         <span class="live-dot"></span>Connecting...
     </div>
@@ -747,26 +759,25 @@
         if (!floater || !placeholder) return;
 
         const scrollY = window.scrollY;
-        const isMobile = window.innerWidth <= 768;
+        const threshold = 50; 
 
-        // "Docked" Coordinates
-        const dockTop = isMobile ? 70 : 20;
-        const dockRight = isMobile ? 10 : 80;
-        const dockLeft = window.innerWidth - dockRight - floater.offsetWidth;
+        // Initial Show (prevents flash of unpositioned element)
+        floater.style.opacity = '1';
 
-        // Determine if we should be docked (Sticky behavior)
-        // Dock when the placeholder scrolls up to the docking point
-        const pRect = placeholder.getBoundingClientRect();
-        
-        // If placeholder top is LESS than dockTop, it means we scrolled past it -> Dock
-        if (pRect.top < dockTop) {
-            floater.style.top = dockTop + 'px';
-            floater.style.left = dockLeft + 'px';
+        if (scrollY > threshold) {
+            // DOCKED MODE - Let CSS handle the fixed positioning via class
+            floater.classList.add('docked');
+            // Clean inline styles to allow CSS to work
+            floater.style.top = '';
+            floater.style.left = '';
         } else {
-            // EMBEDDED MODE (Stick to Placeholder)
-            // pRect.top is relative to viewport, matches fixed positioning
+            // EMBEDDED MODE - Manual positioning relative to placeholder
+            floater.classList.remove('docked');
+            
+            const pRect = placeholder.getBoundingClientRect();
+            // pRect is relative to viewport, which matches 'fixed'
             floater.style.top = pRect.top + 'px';
-            floater.style.left = (pRect.left + (isMobile ? 0 : 0)) + 'px'; 
+            floater.style.left = pRect.left + 'px';
         }
     }
 
