@@ -228,14 +228,12 @@
         /* Charts */
         .charts-row { display: grid; grid-template-columns: 2fr 1fr; gap: 20px; margin-bottom: 30px; }
         .chart-container { position: relative; height: 350px; width: 100%; }
-        
-        /* SPECIFIC SALARY CHART OVERRIDES */
-        #salaryTrendContainer {
-            height: 420px; /* Laptop: 350px + 20% = 420px */
-        }
-
         .chart-container-tall { height: 480px; }
         .chart-container-small { height: 200px; } 
+
+        /* --- SALARY CHART SPECIFIC OVERRIDES --- */
+        /* Desktop: Increase by 20% (350px * 1.2 = 420px) */
+        #salaryTrendContainer { height: 420px; } 
 
         /* TradingView */
         .tv-card { height: 850px; margin-bottom: 50px; overflow: hidden; display: flex; flex-direction: column; padding: 0; }
@@ -335,10 +333,8 @@
             .chart-container { height: 250px !important; }
             .chart-container-tall { height: 550px !important; }
             
-            /* Mobile override for Salary Chart */
-            #salaryTrendContainer {
-                height: 425px !important; /* Mobile: 250px + 70% = 425px */
-            }
+            /* Salary Chart Mobile Override: Increase by 100% (250px * 2 = 500px) */
+            #salaryTrendContainer { height: 500px !important; }
 
             .card { padding: 10px 5px; margin-bottom: 15px; }
             th, td { padding: 8px 4px; font-size: 0.75em; }
@@ -816,11 +812,6 @@
                 }
                 if (chart.options.plugins.datalabels) {
                     chart.options.plugins.datalabels.color = textColor;
-                    
-                    // Specific logic for Salary Chart Text Rotation
-                    if (chart.canvas.id === 'salaryTrendChart') {
-                        chart.options.plugins.datalabels.rotation = (window.innerWidth <= 768) ? -90 : 0;
-                    }
                 }
             }
             
@@ -844,6 +835,11 @@
                         };
                         chart.options.plugins.datalabels.color = 'black';
                     }
+                }
+            } else {
+                 // General Datalabels update for other charts (text color only)
+                 if (chart.options.plugins && chart.options.plugins.datalabels) {
+                    chart.options.plugins.datalabels.color = textColor;
                 }
             }
 
@@ -1210,8 +1206,10 @@
                     legend: { position: 'top' },
                     datalabels: {
                         color: '#000000', 
-                        font: { weight: 'bold', size: isMobile ? 8 : 10 }, 
-                        rotation: isMobile ? -90 : 0, 
+                        font: { weight: 'bold', size: isMobile ? 9 : 10 },
+                        // DYNAMIC ROTATION based on Screen Width
+                        rotation: function(context) { return window.innerWidth <= 768 ? -90 : 0; },
+                        align: function(context) { return window.innerWidth <= 768 ? 'center' : 'top'; },
                         formatter: (val) => val > 500 ? fmtMoneySimple(val) : ''
                     }
                 },
