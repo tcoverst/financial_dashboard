@@ -155,13 +155,13 @@
             transition: none !important;
         }
 
-        /* THEME TOGGLE BUTTON */
+        /* THEME TOGGLE BUTTON - SMALLER SIZE */
         .theme-toggle {
             position: fixed;
-            top: 20px;
-            right: 20px;
-            width: 50px;
-            height: 50px;
+            top: 15px;
+            right: 15px;
+            width: 32px;  /* Reduced from 50px */
+            height: 32px; /* Reduced from 50px */
             background: var(--primary);
             color: white;
             border-radius: 50%;
@@ -170,12 +170,12 @@
             justify-content: center;
             cursor: pointer;
             z-index: 999;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
             border: 2px solid white;
             transition: transform 0.2s;
         }
         .theme-toggle:hover { transform: scale(1.1); }
-        .theme-toggle svg { width: 24px; height: 24px; fill: currentColor; }
+        .theme-toggle svg { width: 16px; height: 16px; fill: currentColor; } /* Reduced from 24px */
 
         /* Headers */
         header {
@@ -408,7 +408,8 @@
             .stat-card { padding: 12px 10px; }
             .stat-value { font-size: 1.4em; }
             .stat-label { font-size: 0.7em; }
-            .tv-card { height: 450px !important; }
+            /* Increased Mobile Height for TV Widget to allow stock widgets to show */
+            .tv-card { height: 650px !important; }
             .chart-container { height: 250px !important; }
             .chart-container-tall { height: 550px !important; }
             .card { padding: 10px 5px; margin-bottom: 15px; }
@@ -729,57 +730,6 @@
 
 <script>
     // ==========================================
-    // CUSTOM CHART PLUGINS
-    // ==========================================
-    
-    // Plugin to display Total Value in the center of a Doughnut Chart
-    const centerTextPlugin = {
-        id: 'centerText',
-        beforeDraw: function(chart) {
-            if (chart.config.type !== 'doughnut') return;
-            var width = chart.width,
-                height = chart.height,
-                ctx = chart.ctx;
-
-            ctx.restore();
-            
-            // Calculate total
-            var total = 0;
-            if(chart.config.data.datasets.length > 0) {
-                total = chart.config.data.datasets[0].data.reduce((a, b) => a + b, 0);
-            }
-            
-            var fontSize = (height / 140).toFixed(2); // Dynamic font size
-            
-            // Text 1: "Total" Label
-            ctx.font = fontSize + "em sans-serif"; // Use system sans-serif which matches Inter/Segoe
-            ctx.textBaseline = "middle";
-            ctx.fillStyle = document.body.classList.contains('sci-fi-mode') ? "rgba(255,255,255,0.6)" : "#7f8c8d";
-            
-            var text = "Total",
-                textX = Math.round((width - ctx.measureText(text).width) / 2),
-                textY = height / 2 - (height * 0.1); 
-
-            ctx.fillText(text, textX, textY);
-
-            // Text 2: The Value
-            var text2 = fmtMoneySimple(total);
-            
-            // Theme-aware color for the value
-            ctx.fillStyle = document.body.classList.contains('sci-fi-mode') ? "#ffffff" : "#2c3e50";
-            ctx.font = "bold " + (fontSize * 1.8) + "em sans-serif";
-            
-            var text2X = Math.round((width - ctx.measureText(text2).width) / 2),
-                text2Y = height / 2 + (height * 0.08); 
-            
-            ctx.fillText(text2, text2X, text2Y);
-            ctx.save();
-        }
-    };
-    
-    Chart.register(centerTextPlugin); // Register Globally
-
-    // ==========================================
     // FLUID STATUS BOX POSITIONING LOGIC
     // ==========================================
     function updateStatusPosition() {
@@ -824,6 +774,9 @@
     // THEME HANDLING
     // ==========================================
     let isSciFiMode = false;
+
+    // GLOBAL PALETTE DEFINITION - Used everywhere for consistency
+    const palette = ['#3498db', '#9b59b6', '#2ecc71', '#e67e22', '#f1c40f', '#e74c3c'];
 
     function toggleTheme() {
         isSciFiMode = !isSciFiMode;
@@ -933,13 +886,9 @@
             // Update Datasets (Transparency)
             chart.data.datasets.forEach(dataset => {
                 if (dataset.backgroundColor && typeof dataset.backgroundColor === 'string' && dataset.backgroundColor.startsWith('#')) {
-                    dataset.backgroundColor = hexToRgba(dataset.backgroundColor.slice(0, 7), alphaFill);
-                } else if (Array.isArray(dataset.backgroundColor)) {
-                     dataset.backgroundColor = dataset.backgroundColor.map(c => {
-                         if(c.startsWith('#')) return hexToRgba(c.slice(0, 7), alphaFill);
-                         return c;
-                     });
-                }
+                    // This handles simple hex codes, but our logic often uses palette vars
+                    // The main chart logic below forces hex+88, so we let the main logic handle colors
+                } 
             });
 
             chart.update();
@@ -1209,6 +1158,12 @@
             return dt.toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
         });
 
+        // REFINED COLORS: Blue, Green, Purple, Yellow
+        const cSalary = palette[0];
+        const cMatch = palette[2];
+        const cEdu = palette[1];
+        const cBonus = palette[4];
+
         if (charts.salaryTrend) charts.salaryTrend.destroy();
         charts.salaryTrend = new Chart(document.getElementById('salaryTrendChart'), {
             type: 'bar',
@@ -1216,10 +1171,22 @@
             data: {
                 labels: labels,
                 datasets: [
-                    { label: 'Base Salary', data: data.map(d => d.salary), backgroundColor: '#5dade2', stack: 'Stack 0' }, 
-                    { label: 'Company Match', data: data.map(d => d.matchAmt), backgroundColor: '#27ae60', stack: 'Stack 0' },
-                    { label: 'Education (YTD)', data: data.map(d => d.ytdEdu), backgroundColor: '#e67e22', stack: 'Stack 0' },
-                    { label: 'Bonus (YTD)', data: data.map(d => d.ytdBonus), backgroundColor: '#f1c40f', stack: 'Stack 0' }
+                    { 
+                        label: 'Base Salary', data: data.map(d => d.salary), 
+                        backgroundColor: cSalary + '88', borderColor: cSalary, borderWidth: 1, stack: 'Stack 0' 
+                    }, 
+                    { 
+                        label: 'Company Match', data: data.map(d => d.matchAmt), 
+                        backgroundColor: cMatch + '88', borderColor: cMatch, borderWidth: 1, stack: 'Stack 0' 
+                    },
+                    { 
+                        label: 'Education (YTD)', data: data.map(d => d.ytdEdu), 
+                        backgroundColor: cEdu + '88', borderColor: cEdu, borderWidth: 1, stack: 'Stack 0' 
+                    },
+                    { 
+                        label: 'Bonus (YTD)', data: data.map(d => d.ytdBonus), 
+                        backgroundColor: cBonus + '88', borderColor: cBonus, borderWidth: 1, stack: 'Stack 0' 
+                    }
                 ]
             },
             options: {
@@ -1239,23 +1206,28 @@
         if (charts.compBreakdown) charts.compBreakdown.destroy();
         charts.compBreakdown = new Chart(document.getElementById('compBreakdownChart'), {
             type: 'doughnut',
-            plugins: [ChartDataLabels, centerTextPlugin], // USE CENTER TEXT PLUGIN
+            plugins: [ChartDataLabels],
             data: {
                 labels: ['Base Salary', 'Match', 'Education (YTD)', 'Bonus (YTD)'],
                 datasets: [{
                     data: [latest.salary, latest.matchAmt, latest.ytdEdu, latest.ytdBonus],
-                    backgroundColor: ['#5dade2', '#27ae60', '#e67e22', '#f1c40f'],
-                    borderWidth: 0, // No border for cleaner ring look
-                    hoverOffset: 15 // Pop out on hover to simulate variable radius
+                    backgroundColor: [cSalary + '88', cMatch + '88', cEdu + '88', cBonus + '88'],
+                    borderColor: [cSalary, cMatch, cEdu, cBonus],
+                    borderWidth: 1
                 }]
             },
             options: {
                 responsive: true, maintainAspectRatio: false,
-                cutout: '70%', // Make it a thin ring like the image
                 plugins: {
                     legend: { position: 'right' },
                     datalabels: {
-                        display: false // Hide data labels on the slices, use legend/center instead
+                        color: '#000000', 
+                        font: { weight: 'bold', size: isMobile ? 9 : 12 }, textAlign: 'center',
+                        formatter: (val, ctx) => {
+                            let sum = ctx.dataset.data.reduce((a, b) => a + b, 0);
+                            let pct = ((val*100) / sum).toFixed(1) + "%";
+                            return val > 0 ? fmtMoneySimple(val) + '\n(' + pct + ')' : '';
+                        }
                     }
                 }
             }
@@ -1338,7 +1310,9 @@
         }
 
         const datasets = [];
-        const colors = ['#B03A2E', '#CA6F1E', '#D4AC0D', '#229954', '#2471A3']; 
+        // Map Projection lines to our standard Palette for consistency
+        const projColors = [palette[0], palette[1], palette[2], palette[3], palette[4]];
+        
         const annotations = {
             porscheLine: {
                 type: 'line', yMin: 3, yMax: 3, borderColor: '#F39C12', borderWidth: 4, borderDash: [6, 4],
@@ -1394,12 +1368,12 @@
                 if (balance >= 3000000 && !porscheBought) {
                     balance -= 300000; porscheBought = true;
                     porscheDate = date;
-                    annotations[`porsche_${idx}`] = { type: 'label', xValue: labels[i], yValue: 3, content: [`${year}`, `${(rate*100).toFixed(1)}%`], position: 'center', color: colors[idx], font: { weight: 'bold', size: isMobile ? 6 : 8 }, yAdjust: -40 };
+                    annotations[`porsche_${idx}`] = { type: 'label', xValue: labels[i], yValue: 3, content: [`${year}`, `${(rate*100).toFixed(1)}%`], position: 'center', color: projColors[idx], font: { weight: 'bold', size: isMobile ? 6 : 8 }, yAdjust: -40 };
                 }
                 if (balance >= 10000000 && !houseBought) {
                     balance -= 5000000; houseBought = true;
                     houseDate = date;
-                    annotations[`house_${idx}`] = { type: 'label', xValue: labels[i], yValue: 10, content: [`${year}`, `${(rate*100).toFixed(1)}%`], position: 'center', color: colors[idx], font: { weight: 'bold', size: isMobile ? 6 : 8 }, yAdjust: -40 };
+                    annotations[`house_${idx}`] = { type: 'label', xValue: labels[i], yValue: 10, content: [`${year}`, `${(rate*100).toFixed(1)}%`], position: 'center', color: projColors[idx], font: { weight: 'bold', size: isMobile ? 6 : 8 }, yAdjust: -40 };
                 }
                 return balance / 1000000; 
             });
@@ -1423,7 +1397,7 @@
                 houseDate: houseDate
             };
 
-            datasets.push({ label: (rate * 100).toFixed(1) + '%', data: dataPoints, borderColor: colors[idx], backgroundColor: colors[idx], borderWidth: 2, pointRadius: 0, tension: 0.4 });
+            datasets.push({ label: (rate * 100).toFixed(1) + '%', data: dataPoints, borderColor: projColors[idx], backgroundColor: projColors[idx], borderWidth: 2, pointRadius: 0, tension: 0.4 });
         });
 
         // Initial Update
@@ -1625,6 +1599,9 @@
         
         const labels = relevantData.map(d => d.key);
         const values = relevantData.map(d => Math.abs(d.rawWithdrawals)); 
+        
+        // Consistent Red
+        const cRed = palette[5];
 
         if (charts.wfWithdrawal) charts.wfWithdrawal.destroy();
         charts.wfWithdrawal = new Chart(document.getElementById('wfWithdrawalChart'), {
@@ -1635,7 +1612,9 @@
                 datasets: [{
                     label: 'Monthly Withdrawals',
                     data: values,
-                    backgroundColor: '#e74c3c',
+                    backgroundColor: cRed + '88', // alpha
+                    borderColor: cRed,
+                    borderWidth: 1,
                     borderRadius: 2,
                     barPercentage: 1.0, 
                     categoryPercentage: 1.0 
@@ -1643,8 +1622,7 @@
             },
             options: {
                 animation: isSilent ? false : {}, // Disable animation if silent update
-                responsive: true,
-                maintainAspectRatio: false,
+                responsive: true, maintainAspectRatio: false,
                 plugins: {
                     legend: { display: false },
                     datalabels: {
@@ -1709,7 +1687,9 @@
         const trailing12Sum = last12Data.reduce((a,b) => a+b, 0);
         document.getElementById('stat-12mo-income').innerText = fmtMoneySimple(trailing12Sum);
 
-        // Render Chart
+        // Render Chart - Use Green from Palette
+        const cGreen = palette[2];
+
         if(charts.incomeTrend) charts.incomeTrend.destroy();
 
         charts.incomeTrend = new Chart(document.getElementById('incomeTrendChart'), {
@@ -1720,7 +1700,9 @@
                 datasets: [{
                     label: 'Total After-Tax Deposits',
                     data: incomeData,
-                    backgroundColor: '#2ecc71',
+                    backgroundColor: cGreen + '88',
+                    borderColor: cGreen,
+                    borderWidth: 1,
                     borderRadius: 3,
                     barPercentage: 1.0, 
                     categoryPercentage: 1.0 
@@ -1814,7 +1796,6 @@
         
         renderProjectionChart(globalTotals.balance[lastIndex], projectionInflow, sortedMonths[lastIndex], isSilent);
 
-        const palette = ['#3498db', '#9b59b6', '#2ecc71', '#e67e22', '#f1c40f', '#e74c3c'];
         const stackedDatasets = accounts.map((acc, index) => {
             const color = palette[index % palette.length];
             return {
@@ -1849,27 +1830,22 @@
         const allocValues = Object.values(allocation);
         const totalPortfolio = allocValues.reduce((a, b) => a + b, 0);
 
+        // Allocation Donut - Uses standard Palette
         if (charts.allocation) charts.allocation.destroy();
         charts.allocation = new Chart(document.getElementById('allocationChart'), {
-            type: 'doughnut', // Changed to Doughnut for Center Text
-            plugins: [ChartDataLabels, centerTextPlugin], // Added Center Text Plugin
-            data: { labels: allocLabels, datasets: [{ 
-                data: allocValues, 
-                backgroundColor: palette,
-                borderWidth: 0, // No border for cleaner ring look
-                hoverOffset: 15 // Pop out on hover to simulate variable radius
-            }] },
+            type: 'doughnut', plugins: [ChartDataLabels],
+            data: { 
+                labels: allocLabels, 
+                datasets: [{ 
+                    data: allocValues, 
+                    backgroundColor: palette.map(c => c + '88'), // alpha background
+                    borderColor: palette, // solid border
+                    borderWidth: 1
+                }] 
+            },
             options: { 
-                animation: isSilent ? false : {}, 
-                maintainAspectRatio: false, 
-                cutout: '70%', // Make it a ring to hold text
-                layout: { padding: 20 }, // Reduced padding
-                plugins: { 
-                    legend: { display: false }, 
-                    tooltip: { callbacks: { label: (ctx) => ctx.label + ': ' + fmtMoney(ctx.raw) + ' (' + ((ctx.raw/totalPortfolio)*100).toFixed(1) + '%)' } }, 
-                    datalabels: { display: false } // Hide labels on the chart itself
-                } 
-            }
+                animation: isSilent ? false : {}, // Disable animation if silent update
+                maintainAspectRatio: false, layout: { padding: 80 }, plugins: { legend: { display: false }, tooltip: { callbacks: { label: (ctx) => ctx.label + ': ' + fmtMoney(ctx.raw) + ' (' + ((ctx.raw/totalPortfolio)*100).toFixed(1) + '%)' } }, datalabels: { color: '#2c3e50', anchor: 'end', align: 'end', offset: 10, formatter: (val, ctx) => (val/totalPortfolio > 0.01) ? ctx.chart.data.labels[ctx.dataIndex] + '\n' + fmtMoneySimple(val) : '' } } }
         });
 
         if (charts.balance) charts.balance.destroy();
@@ -1884,10 +1860,23 @@
             }
         });
 
+        // P&L Chart - Uses Green/Red from Palette with styling
+        const cGreen = palette[2];
+        const cRed = palette[5];
+
         if (charts.pl) charts.pl.destroy();
         charts.pl = new Chart(document.getElementById('plChart'), {
             type: 'bar',
-            data: { labels: sortedMonths, datasets: [{ label: 'Monthly Net Gain/Loss', data: globalTotals.gainLoss, backgroundColor: globalTotals.gainLoss.map(v => v >= 0 ? '#27ae60' : '#c0392b') }] },
+            data: { 
+                labels: sortedMonths, 
+                datasets: [{ 
+                    label: 'Monthly Net Gain/Loss', 
+                    data: globalTotals.gainLoss, 
+                    backgroundColor: globalTotals.gainLoss.map(v => v >= 0 ? cGreen + '88' : cRed + '88'),
+                    borderColor: globalTotals.gainLoss.map(v => v >= 0 ? cGreen : cRed),
+                    borderWidth: 1
+                }] 
+            },
             options: { 
                 animation: isSilent ? false : {}, // Disable animation if silent update
                 responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { grid: { color: '#f0f0f0' } }, x: { grid: { display: false } } } 
@@ -1922,7 +1911,24 @@
     function initTradingView(theme) {
         document.getElementById('tv-widget-container').innerHTML = ''; // Clear existing
         new TradingView.widget({
-            "container_id": "tv-widget-container", "autosize": true, "symbol": "NASDAQ:GOOGL", "interval": "D", "timezone": "America/New_York", "theme": theme, "style": "1", "locale": "en", "toolbar_bg": "#f1f3f6", "enable_publishing": false, "allow_symbol_change": true, "save_image": false, "details": true, "hotlist": false, "calendar": false,
+            "container_id": "tv-widget-container",
+            "autosize": true,
+            "symbol": "NASDAQ:GOOGL",
+            "interval": "D",
+            "timezone": "America/New_York",
+            "theme": theme,
+            "style": "1",
+            "locale": "en",
+            "toolbar_bg": "#f1f3f6",
+            "enable_publishing": false,
+            "allow_symbol_change": true,
+            "save_image": false,
+            "details": true,     // Ensure this is true
+            "hotlist": true,     // Enable this (was false)
+            "calendar": true,    // Enable this (was false)
+            "show_popup_button": true,
+            "popup_width": "1000",
+            "popup_height": "650",
             "watchlist": ["NASDAQ:GOOGL", "NASDAQ:VIGIX", "NASDAQ:VTSAX", "NASDAQ:BND", "AMEX:BIL"]
         });
     }
