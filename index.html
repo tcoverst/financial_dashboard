@@ -200,6 +200,22 @@
             text-align: center;
             flex-direction: column;
             gap: 10px;
+            transition: opacity 0.3s ease;
+        }
+        
+        /* Pulse animation for live dot */
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.4; }
+            100% { opacity: 1; }
+        }
+        .live-dot {
+            height: 8px; width: 8px; 
+            background-color: #c0392b; 
+            border-radius: 50%; 
+            display: inline-block; 
+            margin-right: 5px;
+            animation: pulse 1.5s infinite;
         }
 
         /* RESPONSIVE */
@@ -237,7 +253,10 @@
             <div class="subtitle">Investment Portfolio & Compensation Analysis</div>
         </div>
         <div style="text-align: right;">
-            <div style="font-size: 0.9em; font-weight: bold;" id="latest-date-display">-</div>
+            <div style="font-size: 0.9em; font-weight: bold; color: #c0392b;" id="latest-date-display">
+                <span class="live-dot"></span>Connecting...
+            </div>
+            <div id="refresh-timer" style="font-size: 0.75em; color: #999; margin-top: 4px;">Updates in 60s</div>
         </div>
     </header>
 
@@ -532,8 +551,13 @@
 
     let projectionDataStore = {};
     let projectionMetadata = {}; 
-    let globalAccountsData = []; // Store for filtering
-    let incomeChartInstance = null;
+    let globalAccountsData = []; // Store for filtering & refreshing
+    
+    // Chart Instances Store (for destruction before re-render)
+    let charts = {};
+
+    let refreshInterval = null;
+    let refreshTimer = 60;
 
     // ==========================================
     // UTILITIES
@@ -651,9 +675,19 @@
         return null; // Return NULL to indicate failure (not 0)
     }
 
-    async function updateWithLiveMarketData(accounts) {
+    async function updateWithLiveMarketData(accounts, isSilent = false) {
         const statusDiv = document.getElementById('loading');
-        statusDiv.innerHTML = "Fetching Real-Time Market Data...<br><span style='font-size:0.8em; font-weight:normal'>Trying multiple sources...</span>";
+        const headerStatus = document.getElementById('latest-date-display');
+        
+        if (!isSilent) {
+            statusDiv.style.opacity = '1';
+            statusDiv.style.display = 'flex';
+            statusDiv.innerHTML = "Fetching Real-Time Market Data...<br><span style='font-size:0.8em; font-weight:normal'>Trying multiple sources...</span>";
+        } else {
+            // Subtle indicator for background refresh
+            headerStatus.innerHTML = "<span class='live-dot'></span> Updating Market Data...";
+            headerStatus.style.color = "#e67e22";
+        }
         
         const now = new Date();
         const currentYear = now.getFullYear();
@@ -710,8 +744,11 @@
             if (mtdGrowthRate === null) {
                 // FAILURE CASE
                 liveEntry.isError = true;
-                liveEntry.marketGain = 0;
-                liveEntry.balance = baselineEntry.balance + liveEntry.deposits + liveEntry.income;
+                // keep previous values if they exist, or reset to 0 growth
+                if (isNewRow) {
+                    liveEntry.marketGain = 0;
+                    liveEntry.balance = baselineEntry.balance + liveEntry.deposits + liveEntry.income;
+                }
             } else {
                 // SUCCESS CASE
                 const growthAmount = baselineEntry.balance * mtdGrowthRate;
@@ -773,7 +810,8 @@
             return dt.toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
         });
 
-        new Chart(document.getElementById('salaryTrendChart'), {
+        if (charts.salaryTrend) charts.salaryTrend.destroy();
+        charts.salaryTrend = new Chart(document.getElementById('salaryTrendChart'), {
             type: 'bar',
             plugins: [ChartDataLabels],
             data: {
@@ -799,7 +837,8 @@
             }
         });
 
-        new Chart(document.getElementById('compBreakdownChart'), {
+        if (charts.compBreakdown) charts.compBreakdown.destroy();
+        charts.compBreakdown = new Chart(document.getElementById('compBreakdownChart'), {
             type: 'doughnut',
             plugins: [ChartDataLabels],
             data: {
@@ -831,7 +870,6 @@
     // LOGIC: PROJECTION
     // ==========================================
     
-    // UNIFIED UPDATE FUNCTION
     function updateAllProjections() {
         updateExtrapolationCards();
         updateProjectionTable();
@@ -995,7 +1033,8 @@
         // Initial Update
         updateAllProjections();
 
-        new Chart(document.getElementById('projectionChart'), {
+        if (charts.projection) charts.projection.destroy();
+        charts.projection = new Chart(document.getElementById('projectionChart'), {
             type: 'line', data: { labels: labels, datasets: datasets },
             options: {
                 responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
@@ -1082,16 +1121,39 @@
             
             globalAccountsData = accounts;
 
-            // 3. APPLY REAL-TIME MARKET DATA
-            await updateWithLiveMarketData(accounts);
+            // 3. APPLY REAL-TIME MARKET DATA (Initial)
+            await updateWithLiveMarketData(accounts, false);
 
             processAndRender(accounts);
-            document.getElementById('loading').style.display = 'none';
+            
+            // Hide loading
+            document.getElementById('loading').style.opacity = '0';
+            setTimeout(() => { document.getElementById('loading').style.display = 'none'; }, 300);
+
+            // 4. START AUTO-REFRESH (Every 60 Seconds)
+            startAutoRefresh();
 
         } catch (error) {
             console.error(error);
             document.getElementById('loading').innerHTML = "Error loading data.<br>" + error.message;
         }
+    }
+
+    function startAutoRefresh() {
+        // Update timer text every second
+        setInterval(() => {
+            refreshTimer--;
+            if (refreshTimer <= 0) refreshTimer = 60;
+            document.getElementById('refresh-timer').innerText = `Updates in ${refreshTimer}s`;
+        }, 1000);
+
+        // Actual Refresh Loop (60s)
+        setInterval(async () => {
+            console.log("Refreshing Market Data...");
+            await updateWithLiveMarketData(globalAccountsData, true); // Silent = true
+            processAndRender(globalAccountsData);
+            refreshTimer = 60;
+        }, 60000);
     }
 
     function createSnapshotTable(accounts, alignedData, index, tableId) {
@@ -1164,7 +1226,8 @@
         const labels = relevantData.map(d => d.key);
         const values = relevantData.map(d => Math.abs(d.rawWithdrawals)); 
 
-        new Chart(document.getElementById('wfWithdrawalChart'), {
+        if (charts.wfWithdrawal) charts.wfWithdrawal.destroy();
+        charts.wfWithdrawal = new Chart(document.getElementById('wfWithdrawalChart'), {
             type: 'bar',
             plugins: [ChartDataLabels],
             data: {
@@ -1203,6 +1266,8 @@
     function initIncomeAnalysis(accounts) {
         const container = document.getElementById('income-filter-container');
         
+        if (container.children.length > 1) return; // Prevent duplicates
+
         // Define Defaults: Wells, UTMA, Plan A, Plan B
         const defaultIds = ['wellsFargo', 'vanguardUTMA', 'vanguardA', 'vanguardB'];
 
@@ -1244,9 +1309,9 @@
         document.getElementById('stat-12mo-income').innerText = fmtMoneySimple(trailing12Sum);
 
         // Render Chart
-        if(incomeChartInstance) incomeChartInstance.destroy();
+        if(charts.incomeTrend) charts.incomeTrend.destroy();
 
-        incomeChartInstance = new Chart(document.getElementById('incomeTrendChart'), {
+        charts.incomeTrend = new Chart(document.getElementById('incomeTrendChart'), {
             type: 'bar',
             plugins: [ChartDataLabels],
             data: {
@@ -1316,7 +1381,11 @@
         });
 
         const lastIndex = sortedMonths.length - 1;
-        document.getElementById('latest-date-display').innerText = "Data as of " + sortedMonths[lastIndex] + " (LIVE)";
+        
+        // Update Live Header with Time
+        const now = new Date();
+        const timeString = now.toLocaleTimeString();
+        document.getElementById('latest-date-display').innerHTML = `<span class="live-dot"></span>Data as of ${sortedMonths[lastIndex]} (${timeString})`;
         document.getElementById('latest-date-display').style.color = "#c0392b"; 
         
         document.getElementById('stat-networth').innerText = fmtMoney(globalTotals.balance[lastIndex]);
@@ -1376,13 +1445,15 @@
         const allocValues = Object.values(allocation);
         const totalPortfolio = allocValues.reduce((a, b) => a + b, 0);
 
-        new Chart(document.getElementById('allocationChart'), {
+        if (charts.allocation) charts.allocation.destroy();
+        charts.allocation = new Chart(document.getElementById('allocationChart'), {
             type: 'doughnut', plugins: [ChartDataLabels],
             data: { labels: allocLabels, datasets: [{ data: allocValues, backgroundColor: palette }] },
             options: { maintainAspectRatio: false, layout: { padding: 80 }, plugins: { legend: { display: false }, tooltip: { callbacks: { label: (ctx) => ctx.label + ': ' + fmtMoney(ctx.raw) + ' (' + ((ctx.raw/totalPortfolio)*100).toFixed(1) + '%)' } }, datalabels: { color: '#2c3e50', anchor: 'end', align: 'end', offset: 10, formatter: (val, ctx) => (val/totalPortfolio > 0.01) ? ctx.chart.data.labels[ctx.dataIndex] + '\n' + fmtMoneySimple(val) : '' } } }
         });
 
-        new Chart(document.getElementById('balanceChart'), {
+        if (charts.balance) charts.balance.destroy();
+        charts.balance = new Chart(document.getElementById('balanceChart'), {
             type: 'line', plugins: [ChartDataLabels],
             data: { labels: sortedMonths, datasets: stackedDatasets },
             options: {
@@ -1392,7 +1463,8 @@
             }
         });
 
-        new Chart(document.getElementById('plChart'), {
+        if (charts.pl) charts.pl.destroy();
+        charts.pl = new Chart(document.getElementById('plChart'), {
             type: 'bar',
             data: { labels: sortedMonths, datasets: [{ label: 'Monthly Net Gain/Loss', data: globalTotals.gainLoss, backgroundColor: globalTotals.gainLoss.map(v => v >= 0 ? '#27ae60' : '#c0392b') }] },
             options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { grid: { color: '#f0f0f0' } }, x: { grid: { display: false } } } }
