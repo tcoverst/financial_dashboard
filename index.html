@@ -145,14 +145,21 @@
             backdrop-filter: blur(5px);
             text-align: right;
             
-            /* Fluid Animation Settings */
-            transition: top 0.6s cubic-bezier(0.16, 1, 0.3, 1), left 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+            /* REMOVED TRANSITION TO FIX MOBILE SCROLL LAG */
             will-change: top, left;
         }
 
         /* UTILITY: DISABLE TRANSITION FOR IMMEDIATE UPDATES (used during theme switch) */
         .status-floater.no-transition {
             transition: none !important;
+        }
+        
+        /* MOBILE DOCK STATE - Triggered via JS Class */
+        .status-floater.mobile-dock { 
+            top: 70px !important; 
+            left: auto !important; 
+            right: 10px !important; 
+            padding: 6px 12px; 
         }
 
         /* THEME TOGGLE BUTTON - SMALLER SIZE */
@@ -385,8 +392,7 @@
 
         @media (max-width: 768px) {
             body { padding: 5px; }
-            /* Mobile adjustment for status if docked */
-            .status-floater.mobile-dock { top: 70px !important; left: auto !important; right: 10px !important; padding: 6px 12px; }
+            /* REMOVED: .status-floater.mobile-dock { ... } from media query as it's now global helper class */
             
             header { 
                 padding: 15px; 
@@ -750,25 +756,31 @@
         const threshold = 50; // Scroll amount before docking starts
         const isMobile = window.innerWidth <= 768;
 
-        // "Docked" Coordinates
-        const dockTop = isMobile ? 70 : 20;
-        const dockRight = isMobile ? 10 : 80;
-        // We use LEFT positioning to allow smooth CSS transitions between modes
+        // "Docked" Coordinates (for desktop fallback)
+        const dockTop = 20; 
+        const dockRight = 80;
         const dockLeft = window.innerWidth - dockRight - floater.offsetWidth;
 
         if (scrollY > threshold) {
-            // DOCKED MODE (Fixed to Top Right)
-            floater.style.top = dockTop + 'px';
-            floater.style.left = dockLeft + 'px';
+            // DOCKED MODE
+            if (isMobile) {
+                // Use CSS class for robust positioning on mobile (avoids calculation errors)
+                floater.classList.add('mobile-dock');
+                // Clear inline styles that might interfere
+                floater.style.top = ''; 
+                floater.style.left = '';
+            } else {
+                floater.classList.remove('mobile-dock');
+                floater.style.top = dockTop + 'px';
+                floater.style.left = dockLeft + 'px';
+            }
         } else {
-            // EMBEDDED MODE (Stick to Placeholder)
+            // EMBEDDED MODE
+            floater.classList.remove('mobile-dock');
             const pRect = placeholder.getBoundingClientRect();
-            // pRect.top is relative to viewport, which matches 'fixed' positioning context
-            // We align it directly over the placeholder
+            // In embedded mode, just stick to the placeholder's visual position
             floater.style.top = pRect.top + 'px';
-            floater.style.left = (pRect.left + (isMobile ? 0 : 0)) + 'px'; // Add offset if needed
-            
-            // Optional: Ensure width matches on mobile if needed, but floater has auto width
+            floater.style.left = (pRect.left) + 'px'; 
         }
     }
 
