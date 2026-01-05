@@ -642,6 +642,12 @@
 
     <div class="card" style="padding-bottom:10px;">
         <h3 style="margin-bottom:10px">+25 Year Extrapolation Controls</h3>
+        
+        <div class="filter-group" style="margin-bottom: 10px;">
+            <span class="filter-label">Payday Anchor (Bi-weekly):</span>
+            <input type="date" id="paydayAnchor" value="2026-01-10" style="padding:5px; border-radius:4px; border:1px solid #ccc; font-family:inherit;" onchange="updateAllProjections()">
+        </div>
+
         <div class="filter-group">
             <span class="filter-label">Select Annual Return:</span>
             
@@ -689,8 +695,8 @@
 
     <div class="card">
         <h3>Net Worth Projection (Range: 5% - 15% Annual Return)</h3>
-        <div style="text-align: center; font-size: 0.85em; color: #7f8c8d; margin-bottom: 10px;">
-            Baseline: Current Net Worth + Previous Month Inflow (Growing 6% each Jan, 3% each July)
+        <div id="chart-subtitle-text" style="text-align: center; font-size: 0.85em; color: #7f8c8d; margin-bottom: 10px;">
+            Baseline: Current Net Worth + Bi-Weekly Contributions (Derived from latest inflow)
         </div>
         <div class="chart-container chart-container-tall">
             <canvas id="projectionChart"></canvas>
@@ -705,7 +711,12 @@
             Future values are calculated monthly using the formula: 
             <code style="background:var(--card-bg); padding:2px 4px; border-radius:3px; color:var(--danger); font-family:monospace; word-break: break-word;">Balance(t) = Balance(t-1) × (1 + AnnualRate/12) + MonthlyInflow(t)</code>.<br>
             <strong>Contribution Assumptions:</strong>
-            The "Monthly Inflow" (your investment contributions) automatically increases by <strong>6% every January</strong> (simulating raises/bonus) and <strong>3% every July</strong> (simulating mid-year adjustments).
+            Contributions are calculated <strong>bi-weekly (every 14 days)</strong> based on the selected Payday Anchor. Most months have 2 contributions, while some have 3. 
+            <br>
+            Raises are applied to the base paycheck amount: 
+            <strong><span id="jan-raise-display">6.0%</span> every January</strong> and 
+            <strong><span id="july-raise-display">3.0%</span> every July</strong> 
+            (Auto-calculated from your most recent salary history).
         </div>
     
         <div class="table-responsive" style="max-height: 500px;">
@@ -775,6 +786,10 @@
 
     // GLOBAL PALETTE DEFINITION - Used everywhere for consistency
     const palette = ['#3498db', '#9b59b6', '#2ecc71', '#e67e22', '#f1c40f', '#e74c3c'];
+
+    // RAISE CALCULATION GLOBALS
+    let globalJanRaise = 0.06;
+    let globalJulyRaise = 0.03;
 
     function toggleTheme() {
         isSciFiMode = !isSciFiMode;
@@ -1127,6 +1142,57 @@
         }));
 
         data.sort((a,b) => new Date(a.date) - new Date(b.date));
+        
+        // --- AUTO-CALCULATE RECENT RAISES ---
+        const now = new Date();
+        const currentYear = now.getFullYear();
+
+        let targetJan = new Date(currentYear, 0, 1);
+        if (now < targetJan) targetJan = new Date(currentYear - 1, 0, 1); 
+
+        let targetJuly = new Date(currentYear, 6, 1);
+        if (now < targetJuly) targetJuly = new Date(currentYear - 1, 6, 1);
+
+        let closestJanEntry = null;
+        let minJanDiff = Infinity;
+        let closestJanIndex = -1;
+
+        let closestJulyEntry = null;
+        let minJulyDiff = Infinity;
+        let closestJulyIndex = -1;
+
+        data.forEach((d, index) => {
+            const dDate = new Date(d.date);
+            const diffJan = Math.abs(dDate - targetJan);
+            const diffJuly = Math.abs(dDate - targetJuly);
+            
+            if (diffJan < minJanDiff) { minJanDiff = diffJan; closestJanEntry = d; closestJanIndex = index; }
+            if (diffJuly < minJulyDiff) { minJulyDiff = diffJuly; closestJulyEntry = d; closestJulyIndex = index; }
+        });
+
+        if (closestJanIndex > 0) {
+            const prev = data[closestJanIndex - 1];
+            if (prev.salary > 0) globalJanRaise = (closestJanEntry.salary - prev.salary) / prev.salary;
+        }
+        if (closestJulyIndex > 0) {
+            const prev = data[closestJulyIndex - 1];
+            if (prev.salary > 0) globalJulyRaise = (closestJulyEntry.salary - prev.salary) / prev.salary;
+        }
+        
+        // Update UI Text in Breakdown
+        const janPctText = (globalJanRaise * 100).toFixed(1) + '%';
+        const julyPctText = (globalJulyRaise * 100).toFixed(1) + '%';
+        document.getElementById('jan-raise-display').innerText = janPctText;
+        document.getElementById('july-raise-display').innerText = julyPctText;
+        
+        // Update Chart Subtitle
+        const chartSub = document.getElementById('chart-subtitle-text');
+        if(chartSub) {
+            chartSub.innerHTML = `Baseline: Current Net Worth + Bi-Weekly Contributions (Raises: <strong>${janPctText}</strong> Jan, <strong>${julyPctText}</strong> July)`;
+        }
+
+        // --- END AUTO-CALCULATION ---
+
         if (data.length === 0) return;
         const latest = data[data.length - 1];
         
@@ -1294,9 +1360,44 @@
         const currentYear = new Date().getFullYear();
         const endYear = currentYear + 25;
         
+        // Parsing dates
         const parts = startDateStr.split('-');
         let currentDate = new Date(parseInt(parts[0]), parseInt(parts[1])-1, 1);
         
+        // PAYDAY ANCHOR SETUP
+        const anchorInput = document.getElementById('paydayAnchor');
+        const anchorParts = anchorInput.value.split('-'); // Parse YYYY-MM-DD
+        
+        // --- SMART BASE PAYCHECK CALCULATION ---
+        // 1. Determine "Previous Month" relative to the Current Data Point
+        // If data is up to May 2025 (currentDate), inflow comes from April 2025.
+        // We need to know how many paydays were in April 2025 to normalize the inflow.
+        let baselineMonthDate = new Date(currentDate);
+        baselineMonthDate.setMonth(baselineMonthDate.getMonth() - 1); 
+        
+        // 2. Count Paydays in that specific baseline month
+        let blStart = new Date(baselineMonthDate.getFullYear(), baselineMonthDate.getMonth(), 1);
+        let blEnd = new Date(baselineMonthDate.getFullYear(), baselineMonthDate.getMonth() + 1, 0);
+        let blTracker = new Date(parseInt(anchorParts[0]), parseInt(anchorParts[1])-1, parseInt(anchorParts[2]));
+        
+        // Align tracker to before range
+        while(blTracker > blStart) { blTracker.setDate(blTracker.getDate() - 14); }
+        // Walk forward
+        let paychecksInBaseline = 0;
+        while(blTracker < blStart) { blTracker.setDate(blTracker.getDate() + 14); }
+        // Now blTracker is >= blStart. Count within range.
+        while(blTracker <= blEnd) {
+            paychecksInBaseline++;
+            blTracker.setDate(blTracker.getDate() + 14);
+        }
+        
+        // 3. Fallback if 0 (shouldn't happen with valid logic, but safety first)
+        if(paychecksInBaseline < 2) paychecksInBaseline = 2; 
+        
+        // 4. Derive Base Paycheck Amount
+        let paycheckAmount = startInflow / paychecksInBaseline;
+        // ----------------------------------------
+
         const labels = [];
         const timeline = [];
         
@@ -1308,7 +1409,6 @@
         }
 
         const datasets = [];
-        // Map Projection lines to our standard Palette for consistency
         const projColors = [palette[0], palette[1], palette[2], palette[3], palette[4]];
         
         const annotations = {
@@ -1336,7 +1436,16 @@
 
         rates.forEach((rate, idx) => {
             let balance = startBalance;
-            let monthlyContrib = startInflow;
+            let currentPaycheck = paycheckAmount; 
+            
+            // Independent Tracker for Paydays for this Rate simulation
+            let payTracker = new Date(parseInt(anchorParts[0]), parseInt(anchorParts[1])-1, parseInt(anchorParts[2]));
+
+            // Pre-roll tracker to start of timeline
+            while(payTracker < timeline[0]) {
+                 payTracker.setDate(payTracker.getDate() + 14);
+            }
+
             let porscheBought = false, houseBought = false;
             let currentYearStats = { year: timeline[0].getFullYear(), startBal: balance, annualContrib: 0, annualGrowth: 0 };
             let yearlyData = [];
@@ -1354,9 +1463,24 @@
                 }
 
                 if (i > 0) { 
-                    if (date.getMonth() === 0) monthlyContrib *= 1.06;
-                    if (date.getMonth() === 6) monthlyContrib *= 1.03;
+                    // Apply raises to base paycheck amount using Auto-Calculated Globals
+                    if (date.getMonth() === 0) currentPaycheck *= (1 + globalJanRaise);
+                    if (date.getMonth() === 6) currentPaycheck *= (1 + globalJulyRaise);
                 }
+
+                // Determine Paychecks in this specific month
+                let paychecksInMonth = 0;
+                const monthStart = new Date(date.getFullYear(), date.getMonth(), 1);
+                const monthEnd = new Date(date.getFullYear(), date.getMonth() + 1, 0);
+                
+                while (payTracker <= monthEnd) {
+                    if (payTracker >= monthStart) {
+                        paychecksInMonth++;
+                    }
+                    payTracker.setDate(payTracker.getDate() + 14);
+                }
+
+                const monthlyContrib = currentPaycheck * paychecksInMonth;
 
                 const growth = balance * (rate / 12);
                 balance += growth;
