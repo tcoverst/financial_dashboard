@@ -22,6 +22,7 @@
             --text: #2c3e50;
             --accent: #8e44ad;
             --goal: #e67e22;
+            --income: #2980b9;
         }
         
         html, body { overflow-x: hidden; }
@@ -83,6 +84,7 @@
         .stat-card.red { border-left-color: var(--danger); }
         .stat-card.purple { border-left-color: var(--accent); }
         .stat-card.orange { border-left-color: var(--goal); }
+        .stat-card.blue { border-left-color: var(--income); }
         
         .stat-label { font-size: 0.85em; color: #7f8c8d; text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .stat-value { font-size: 1.8em; font-weight: 700; color: var(--primary); margin-top: 5px; word-break: break-word; }
@@ -247,13 +249,6 @@
         </div>
     </div>
     
-    <div class="card">
-        <h3>Wells Fargo Monthly Withdrawals (Last 24 Months)</h3>
-        <div class="chart-container chart-container-small">
-            <canvas id="wfWithdrawalChart"></canvas>
-        </div>
-    </div>
-
     <div class="card tv-card">
         <h3>Live Market Watch (Your Positions)</h3>
         <div class="tv-widget-container" id="tv-widget-container"></div>
@@ -312,6 +307,13 @@
     </div>
 
     <div class="card">
+        <h3>Wells Fargo Monthly Withdrawals (Last 24 Months)</h3>
+        <div class="chart-container chart-container-small">
+            <canvas id="wfWithdrawalChart"></canvas>
+        </div>
+    </div>
+
+    <div class="card">
         <h3>Investment History Details</h3>
         <div class="table-responsive" style="max-height: 400px;">
             <table id="historyTable" class="table-compact">
@@ -342,10 +344,10 @@
             <div class="stat-value" id="stat-total-comp">-</div>
             <div class="stat-sub">Base + Match + Bonus + Edu</div>
         </div>
-        <div class="stat-card">
-            <div class="stat-label">Education Benefits (YTD)</div>
-            <div class="stat-value" id="stat-edu-ytd">-</div>
-            <div class="stat-sub">Tuition Reimbursement</div>
+        <div class="stat-card blue">
+            <div class="stat-label">Total After-Tax Income</div>
+            <div class="stat-value" id="stat-last12-income">-</div>
+            <div class="stat-sub">Last 12 Months (Deposits)</div>
         </div>
         <div class="stat-card">
             <div class="stat-label">Match Rate</div>
@@ -366,6 +368,13 @@
             <div class="chart-container">
                 <canvas id="compBreakdownChart"></canvas>
             </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <h3>Monthly After-Tax Income (Last 24 Months)</h3>
+        <div class="chart-container">
+            <canvas id="afterTaxIncomeChart"></canvas>
         </div>
     </div>
 
@@ -626,8 +635,12 @@
 
             if (!baselineEntry) return;
 
+            // Check if there is ALREADY an entry for this month in the sheet data
+            // If the live fetch fails or is zero, we might want to fallback to this.
+            let existingSheetEntry = acc.data.find(d => d.key === currentMonthKey);
+
             // Find or Create Live Entry
-            let liveEntry = acc.data.find(d => d.key === currentMonthKey);
+            let liveEntry = existingSheetEntry;
             let isNewRow = false;
 
             if (!liveEntry) {
@@ -636,6 +649,7 @@
                     key: currentMonthKey,
                     dateObj: startOfThisMonth,
                     deposits: 0,
+                    rawDeposits: 0, // Initialize rawDeposits
                     income: 0,
                     marketGain: 0,
                     cumulative: baselineEntry.cumulative,
@@ -658,14 +672,24 @@
 
             const mtdGrowthRate = await getMonthToDatePerformance(ticker);
             
-            if (mtdGrowthRate === null) {
-                // FAILURE CASE
-                liveEntry.isError = true;
-                // Keep balance as baseline + manual adds (assume 0 market gain)
-                liveEntry.marketGain = 0;
-                liveEntry.balance = baselineEntry.balance + liveEntry.deposits + liveEntry.income;
+            // LOGIC FIX: fallback to sheet data if live data is bad (null) or 0.00 for Mutual Funds
+            const isMutualFund = (ticker.includes('VIGIX') || ticker.includes('VTSAX'));
+            const isSuspiciousZero = (mtdGrowthRate === 0 && isMutualFund);
+
+            if (mtdGrowthRate === null || isSuspiciousZero) {
+                // FAILURE / SUSPICIOUS ZERO CASE
+                // If we have an existing sheet entry, REVERT to that data (trust the sheet)
+                if (existingSheetEntry) {
+                   // Do nothing, let the original values stand, just mark as checked
+                   liveEntry.isError = (mtdGrowthRate === null); 
+                } else {
+                   // No sheet entry, so we must assume 0
+                   liveEntry.isError = true;
+                   liveEntry.marketGain = 0;
+                   liveEntry.balance = baselineEntry.balance + liveEntry.deposits + liveEntry.income;
+                }
             } else {
-                // SUCCESS CASE
+                // SUCCESS CASE - We have a valid live rate
                 const growthAmount = baselineEntry.balance * mtdGrowthRate;
                 liveEntry.marketGain = growthAmount; 
                 liveEntry.balance = baselineEntry.balance + growthAmount + liveEntry.deposits + liveEntry.income;
@@ -980,7 +1004,7 @@
             const cols = rows[i];
             if (cols.length > 8) {
                 const dateStr = cols[0];
-                const deposits = cleanMoney(cols[2]);
+                const rawDeposits = cleanMoney(cols[2]); // Capture Raw Deposits
                 const withdrawals = cleanMoney(cols[3]); // This captures column D
                 const marketGain = cleanMoney(cols[4]);
                 const income = cleanMoney(cols[5]);
@@ -994,13 +1018,14 @@
                 let month = dateParts[0].padStart(2, '0');
                 let year = dateParts[2];
                 // Net transfers for main chart
-                const netTransfers = deposits + withdrawals;
+                const netTransfers = rawDeposits + withdrawals;
 
                 data.push({
                     key: `${year}-${month}`,
                     dateObj: new Date(year, month - 1, 1),
                     deposits: netTransfers,
-                    rawWithdrawals: withdrawals, // Store raw withdrawals for WF widget
+                    rawDeposits: rawDeposits, // Store separated for Income Chart
+                    rawWithdrawals: withdrawals, 
                     marketGain: marketGain,
                     income: income,
                     cumulative: cumulative,
@@ -1039,12 +1064,83 @@
             await updateWithLiveMarketData(accounts);
 
             processAndRender(accounts);
+            renderIncomeChart(accounts); // RENDER NEW CHART
+            
             document.getElementById('loading').style.display = 'none';
 
         } catch (error) {
             console.error(error);
             document.getElementById('loading').innerHTML = "Error loading data.<br>" + error.message;
         }
+    }
+
+    // NEW FUNCTION: Render After-Tax Income Chart and Stat
+    function renderIncomeChart(accounts) {
+        // Accounts to sum: Wells Fargo, Vanguard UTMA, Plan A, Plan B
+        const targetIds = ['wellsFargo', 'vanguardUTMA', 'vanguardA', 'vanguardB'];
+        
+        // Gather all unique months
+        const allMonthsSet = new Set();
+        accounts.forEach(acc => {
+            if (targetIds.includes(acc.id)) {
+                acc.data.forEach(d => allMonthsSet.add(d.key));
+            }
+        });
+        const sortedMonths = Array.from(allMonthsSet).sort();
+        
+        // Sum deposits per month
+        const incomeData = sortedMonths.map(month => {
+            let sum = 0;
+            targetIds.forEach(id => {
+                const acc = accounts.find(a => a.id === id);
+                if (acc) {
+                    const entry = acc.data.find(d => d.key === month);
+                    if (entry) sum += entry.rawDeposits;
+                }
+            });
+            return { month, value: sum };
+        });
+
+        // 1. Update the STAT (Last 12 Months)
+        const last12 = incomeData.slice(-12);
+        const totalLast12 = last12.reduce((acc, curr) => acc + curr.value, 0);
+        document.getElementById('stat-last12-income').innerText = fmtMoney(totalLast12);
+
+        // 2. Update the CHART (Last 24 Months)
+        const last24 = incomeData.slice(-24);
+        
+        new Chart(document.getElementById('afterTaxIncomeChart'), {
+            type: 'bar',
+            plugins: [ChartDataLabels],
+            data: {
+                labels: last24.map(d => d.month),
+                datasets: [{
+                    label: 'Monthly Income (Deposits)',
+                    data: last24.map(d => d.value),
+                    backgroundColor: '#2980b9',
+                    borderRadius: 4
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    datalabels: {
+                        color: '#2c3e50',
+                        anchor: 'end',
+                        align: 'top',
+                        rotation: isMobile ? -90 : 0, // Vertical on mobile
+                        font: { weight: 'bold', size: 9 },
+                        formatter: (val) => val > 100 ? fmtMoneySimple(val) : '' 
+                    }
+                },
+                scales: {
+                    y: { beginAtZero: true, grid: { color: '#f0f0f0' }, ticks: { font: { size: 9 } } },
+                    x: { grid: { display: false }, ticks: { font: { size: 8 }, maxRotation: 90, minRotation: 90 } }
+                }
+            }
+        });
     }
 
     function createSnapshotTable(accounts, alignedData, index, tableId) {
@@ -1074,7 +1170,13 @@
             // Error handling display
             let marketGainDisplay = "";
             if (entry.isError) {
-                marketGainDisplay = '<span style="color:#e74c3c; font-style:italic; font-size:0.9em;">Unavailable</span>';
+                // If error, we might still have data from fallback
+                if(entry.marketGain !== 0 || entry.balance !== 0) {
+                     const gainClass = entry.marketGain >= 0 ? 'text-green' : 'text-red';
+                     marketGainDisplay = `<span class="${gainClass}">${entry.marketGain >= 0 ? '+' : ''}${fmtMoney(entry.marketGain + entry.income)}</span>`;
+                } else {
+                     marketGainDisplay = '<span style="color:#e74c3c; font-style:italic; font-size:0.9em;">Unavailable</span>';
+                }
             } else {
                  const isZero = (entry.marketGain === 0);
                  const gainClass = entry.marketGain >= 0 ? 'text-green' : 'text-red';
@@ -1138,9 +1240,9 @@
                     legend: { display: false },
                     datalabels: {
                         color: '#2c3e50',
-                        anchor: 'end',
-                        align: 'top',
-                        rotation: -90,
+                        anchor: isMobile ? 'end' : 'center', // ADJUSTED
+                        align: isMobile ? 'top' : 'center',  // ADJUSTED
+                        rotation: isMobile ? -90 : 0,        // FIX: Vertical on Mobile, Horizontal on Laptop
                         font: { weight: 'bold', size: 9 },
                         formatter: (val) => val > 200 ? fmtMoneySimple(val) : '' 
                     }
