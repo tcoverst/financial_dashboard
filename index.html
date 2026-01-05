@@ -602,23 +602,10 @@
         if (!ticker || ticker === 'Unknown' || ticker === '-') return 0;
         const cleanTicker = TICKER_MAP[ticker] || ticker.split(' ')[0]; 
 
-        // UPDATED: A "Waterfall" of proxies. 
-        // Work networks often block specific domains, so we try them one by one.
         const proxies = [
-            // 1. CodeTabs (Often bypasses corporate filters best)
-            'https://api.codetabs.com/v1/proxy?quest=',
-            
-            // 2. AllOrigins RAW (Raw mode often looks less suspicious than JSON wrapper)
-            'https://api.allorigins.win/raw?url=',
-            
-            // 3. CORS Proxy IO (Fastest, but most commonly blocked)
             'https://corsproxy.io/?',
-            
-            // 4. ThingProxy (Good backup)
-            'https://thingproxy.freeboard.io/fetch/',
-            
-            // 5. YACDN (Another alternative)
-            'https://yacdn.org/proxy/'
+            'https://api.allorigins.win/get?url=',
+            'https://thingproxy.freeboard.io/fetch/' 
         ];
 
         // Random cache buster to prevent sticky bad responses
@@ -627,36 +614,22 @@
 
         for (const proxy of proxies) {
             try {
-                let fetchUrl = proxy + encodeURIComponent(targetUrl);
-                
-                // Specific handling for proxies that don't need encoding or handle it differently
-                if (proxy.includes('corsproxy.io')) {
-                    fetchUrl = proxy + targetUrl; // corsproxy.io prefers unencoded sometimes
+                let fetchUrl = '';
+                if (proxy.includes('allorigins')) {
+                    fetchUrl = proxy + encodeURIComponent(targetUrl);
+                } else {
+                    fetchUrl = proxy + targetUrl;
                 }
 
                 const response = await fetch(fetchUrl);
-                if (!response.ok) throw new Error(`Proxy ${proxy} returned ${response.status}`);
+                if (!response.ok) throw new Error('Network response was not ok');
                 
-                // DATA PARSING: Handle both Raw JSON and Wrapped JSON
                 let data;
-                // Try parsing as JSON immediately
-                const text = await response.text();
-                
-                try {
-                    data = JSON.parse(text);
-                } catch (e) {
-                    // If simple parse fails, it might be wrapped or malformed
-                    continue; 
-                }
-
-                // If the proxy wrapped it (like older AllOrigins), unwrap it
-                if (data.contents && typeof data.contents === 'string') {
-                    try {
-                        data = JSON.parse(data.contents);
-                    } catch (e) {
-                        // Content wasn't JSON
-                        continue; 
-                    }
+                if (proxy.includes('allorigins')) {
+                    const wrapper = await response.json();
+                    data = JSON.parse(wrapper.contents);
+                } else {
+                    data = await response.json();
                 }
 
                 if (!data.chart || !data.chart.result || data.chart.result.length === 0) continue;
@@ -667,7 +640,7 @@
 
                 if (!closes || closes.length === 0) continue;
 
-                // LOGIC: Calculate Growth
+                // LOGIC UPDATE: Handle Mutual Funds / Intraday Delays
                 const now = new Date();
                 const startOfCurrentMonth = new Date(now.getFullYear(), now.getMonth(), 1);
                 
@@ -692,8 +665,6 @@
 
                 if (!baselinePrice || !currentPrice) return 0;
                 
-                // Success! Return the rate
-                console.log(`Success fetching ${cleanTicker} via ${proxy}`);
                 return (currentPrice - baselinePrice) / baselinePrice;
 
             } catch (e) {
@@ -701,7 +672,7 @@
                 // Continue to next proxy
             }
         }
-        return null; // Return NULL to indicate total failure
+        return null; // Return NULL to indicate failure (not 0)
     }
 
     async function updateWithLiveMarketData(accounts, isSilent = false) {
