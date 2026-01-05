@@ -145,21 +145,14 @@
             backdrop-filter: blur(5px);
             text-align: right;
             
-            /* REMOVED TRANSITION TO FIX MOBILE SCROLL LAG */
+            /* FIX: Removed 'top' from transition to allow instant scroll tracking */
+            transition: left 0.6s cubic-bezier(0.16, 1, 0.3, 1);
             will-change: top, left;
         }
 
         /* UTILITY: DISABLE TRANSITION FOR IMMEDIATE UPDATES (used during theme switch) */
         .status-floater.no-transition {
             transition: none !important;
-        }
-        
-        /* MOBILE DOCK STATE - Triggered via JS Class */
-        .status-floater.mobile-dock { 
-            top: 70px !important; 
-            left: auto !important; 
-            right: 10px !important; 
-            padding: 6px 12px; 
         }
 
         /* THEME TOGGLE BUTTON - SMALLER SIZE */
@@ -392,7 +385,8 @@
 
         @media (max-width: 768px) {
             body { padding: 5px; }
-            /* REMOVED: .status-floater.mobile-dock { ... } from media query as it's now global helper class */
+            /* Mobile adjustment for status if docked */
+            .status-floater.mobile-dock { top: 70px !important; left: auto !important; right: 10px !important; padding: 6px 12px; }
             
             header { 
                 padding: 15px; 
@@ -753,34 +747,26 @@
         if (!floater || !placeholder) return;
 
         const scrollY = window.scrollY;
-        const threshold = 50; // Scroll amount before docking starts
         const isMobile = window.innerWidth <= 768;
 
-        // "Docked" Coordinates (for desktop fallback)
-        const dockTop = 20; 
-        const dockRight = 80;
+        // "Docked" Coordinates
+        const dockTop = isMobile ? 70 : 20;
+        const dockRight = isMobile ? 10 : 80;
         const dockLeft = window.innerWidth - dockRight - floater.offsetWidth;
 
-        if (scrollY > threshold) {
-            // DOCKED MODE
-            if (isMobile) {
-                // Use CSS class for robust positioning on mobile (avoids calculation errors)
-                floater.classList.add('mobile-dock');
-                // Clear inline styles that might interfere
-                floater.style.top = ''; 
-                floater.style.left = '';
-            } else {
-                floater.classList.remove('mobile-dock');
-                floater.style.top = dockTop + 'px';
-                floater.style.left = dockLeft + 'px';
-            }
+        // Determine if we should be docked (Sticky behavior)
+        // Dock when the placeholder scrolls up to the docking point
+        const pRect = placeholder.getBoundingClientRect();
+        
+        // If placeholder top is LESS than dockTop, it means we scrolled past it -> Dock
+        if (pRect.top < dockTop) {
+            floater.style.top = dockTop + 'px';
+            floater.style.left = dockLeft + 'px';
         } else {
-            // EMBEDDED MODE
-            floater.classList.remove('mobile-dock');
-            const pRect = placeholder.getBoundingClientRect();
-            // In embedded mode, just stick to the placeholder's visual position
+            // EMBEDDED MODE (Stick to Placeholder)
+            // pRect.top is relative to viewport, matches fixed positioning
             floater.style.top = pRect.top + 'px';
-            floater.style.left = (pRect.left) + 'px'; 
+            floater.style.left = (pRect.left + (isMobile ? 0 : 0)) + 'px'; 
         }
     }
 
