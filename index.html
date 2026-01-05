@@ -191,6 +191,29 @@
         }
         .checkbox-item input { margin-right: 6px; }
 
+        /* Radio Buttons Group */
+        .radio-group-container {
+            font-size: 0.9rem; /* Smaller than the header */
+            font-weight: normal;
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        .radio-label {
+            display: flex;
+            align-items: center;
+            cursor: pointer;
+            color: #2c3e50;
+        }
+        .radio-label input {
+            margin-right: 5px;
+            cursor: pointer;
+        }
+        .radio-label:hover {
+            color: #2980b9;
+        }
+
         /* Loading Overlay */
         #loading {
             position: fixed; top: 0; left: 0; right: 0; bottom: 0;
@@ -459,13 +482,23 @@
 
     <div class="section-header">
         <div>+25 Year Extrapolation</div>
-        <select id="extrapolationRateSelect" onchange="updateAllProjections()" class="control-select">
-            <option value="0.05">5% Return</option>
-            <option value="0.075">7.5% Return</option>
-            <option value="0.1" selected>10% Return (Baseline)</option>
-            <option value="0.125">12.5% Return</option>
-            <option value="0.15">15% Return</option>
-        </select>
+        <div class="radio-group-container">
+            <label class="radio-label">
+                <input type="radio" name="extrapolationRate" value="0.05" onchange="updateAllProjections()"> 5%
+            </label>
+            <label class="radio-label">
+                <input type="radio" name="extrapolationRate" value="0.075" onchange="updateAllProjections()"> 7.5%
+            </label>
+            <label class="radio-label">
+                <input type="radio" name="extrapolationRate" value="0.1" checked onchange="updateAllProjections()"> 10% (Baseline)
+            </label>
+            <label class="radio-label">
+                <input type="radio" name="extrapolationRate" value="0.125" onchange="updateAllProjections()"> 12.5%
+            </label>
+            <label class="radio-label">
+                <input type="radio" name="extrapolationRate" value="0.15" onchange="updateAllProjections()"> 15%
+            </label>
+        </div>
     </div>
 
     <div class="stats-grid">
@@ -876,7 +909,8 @@
     }
 
     function updateProjectionTable() {
-        const rate = parseFloat(document.getElementById('extrapolationRateSelect').value);
+        // UPDATED: Get value from Radio instead of Select
+        const rate = parseFloat(document.querySelector('input[name="extrapolationRate"]:checked').value);
         const data = projectionDataStore[rate];
         const tbody = document.getElementById('projectionTableBody');
         tbody.innerHTML = '';
@@ -903,7 +937,8 @@
     }
 
     function updateExtrapolationCards() {
-        const rate = parseFloat(document.getElementById('extrapolationRateSelect').value);
+        // UPDATED: Get value from Radio instead of Select
+        const rate = parseFloat(document.querySelector('input[name="extrapolationRate"]:checked').value);
         const meta = projectionMetadata[rate];
 
         if (!meta) return;
