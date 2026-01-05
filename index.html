@@ -192,22 +192,15 @@
         .checkbox-item input { margin-right: 6px; }
 
         /* Radio Buttons Group */
-        .radio-group-container {
-            font-size: 0.9rem; /* Smaller than the header */
-            font-weight: normal;
-            display: flex;
-            gap: 15px;
-            align-items: center;
-            flex-wrap: wrap;
-        }
         .radio-label {
             display: flex;
             align-items: center;
             cursor: pointer;
             color: #2c3e50;
+            font-size: 0.85em; /* Matches checkbox-item size */
         }
         .radio-label input {
-            margin-right: 5px;
+            margin-right: 6px;
             cursor: pointer;
         }
         .radio-label:hover {
@@ -480,9 +473,11 @@
         </div>
     </div>
 
-    <div class="section-header">
-        <div>+25 Year Extrapolation</div>
-        <div class="radio-group-container">
+    <div class="card" style="padding-bottom:10px;">
+        <h3 style="margin-bottom:10px">+25 Year Extrapolation Controls</h3>
+        <div class="filter-group">
+            <span class="filter-label">Select Annual Return:</span>
+            
             <label class="radio-label">
                 <input type="radio" name="extrapolationRate" value="0.05" onchange="updateAllProjections()"> 5%
             </label>
