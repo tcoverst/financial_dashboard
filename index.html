@@ -231,9 +231,11 @@
         .chart-container-tall { height: 480px; }
         .chart-container-small { height: 200px; } 
 
-        /* --- SALARY CHART SPECIFIC OVERRIDES --- */
-        /* Desktop: Increase by 20% (350px * 1.2 = 420px) */
-        #salaryTrendContainer { height: 420px; } 
+        /* SALARY CHART SPECIFIC OVERRIDES */
+        /* Desktop: Increase height by 20% (350 * 1.2 = 420px) */
+        #salary-trend-container {
+            height: 420px; 
+        }
 
         /* TradingView */
         .tv-card { height: 850px; margin-bottom: 50px; overflow: hidden; display: flex; flex-direction: column; padding: 0; }
@@ -332,14 +334,16 @@
             .tv-card { height: 650px !important; }
             .chart-container { height: 250px !important; }
             .chart-container-tall { height: 550px !important; }
-            
-            /* Salary Chart Mobile Override: Increase by 100% (250px * 2 = 500px) */
-            #salaryTrendContainer { height: 500px !important; }
-
             .card { padding: 10px 5px; margin-bottom: 15px; }
             th, td { padding: 8px 4px; font-size: 0.75em; }
             .table-responsive { display: block; width: 100%; overflow-x: auto; }
             select#extrapolationRateSelect { max-width: 100%; font-size: 0.8em; }
+            
+            /* SALARY CHART MOBILE OVERRIDE */
+            /* Mobile: Increase height by 100% (250 * 2 = 500px) */
+            #salary-trend-container {
+                height: 500px !important;
+            }
         }
     </style>
 </head>
@@ -507,7 +511,7 @@
     <div class="charts-row">
         <div class="card">
             <h3>Salary vs. Total Compensation Trends (Stacked)</h3>
-            <div class="chart-container" id="salaryTrendContainer">
+            <div class="chart-container" id="salary-trend-container">
                 <canvas id="salaryTrendChart"></canvas>
             </div>
         </div>
@@ -1206,11 +1210,11 @@
                     legend: { position: 'top' },
                     datalabels: {
                         color: '#000000', 
-                        font: { weight: 'bold', size: isMobile ? 9 : 10 },
-                        // DYNAMIC ROTATION based on Screen Width
-                        rotation: function(context) { return window.innerWidth <= 768 ? -90 : 0; },
-                        align: function(context) { return window.innerWidth <= 768 ? 'center' : 'top'; },
-                        formatter: (val) => val > 500 ? fmtMoneySimple(val) : ''
+                        rotation: isMobile ? -90 : 0, // UPDATED: Vertical on mobile, Horizontal on desktop
+                        align: 'center',
+                        anchor: 'center',
+                        font: { weight: 'bold', size: isMobile ? 10 : 11 }, 
+                        formatter: (val) => val > 1000 ? fmtMoneySimple(val) : ''
                     }
                 },
                 scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true } }
