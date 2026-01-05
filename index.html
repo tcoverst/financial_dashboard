@@ -138,7 +138,6 @@
 
         .stat-value {
             letter-spacing: -1px;
-            /* Text shadow in light mode is subtle, darker in dark mode via override if needed */
         }
 
         /* =========================================
@@ -211,13 +210,9 @@
         }
         .stat-card {
             padding: 20px;
-            border-left: 4px solid var(--primary);
+            /* Left colored borders removed */
             min-width: 0; 
         }
-        .stat-card.green { border-left-color: var(--success); }
-        .stat-card.red { border-left-color: var(--danger); }
-        .stat-card.purple { border-left-color: var(--accent); }
-        .stat-card.orange { border-left-color: var(--goal); }
         
         .stat-label { font-size: 0.85em; color: #7f8c8d; text-transform: uppercase; letter-spacing: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .stat-value { font-size: 1.8em; font-weight: 700; color: var(--primary); margin-top: 5px; word-break: break-word; }
@@ -370,7 +365,7 @@
             <div class="stat-value" id="stat-networth">-</div>
             <div class="stat-sub">Across all accounts</div>
         </div>
-        <div class="stat-card green">
+        <div class="stat-card">
             <div class="stat-label">Total Lifetime Gain</div>
             <div class="stat-value" id="stat-lifetime-gain">-</div>
             <div class="stat-sub">Cumulative Returns</div>
@@ -479,12 +474,12 @@
     </div>
 
     <div class="stats-grid">
-        <div class="stat-card purple">
+        <div class="stat-card">
             <div class="stat-label">Latest Base Salary</div>
             <div class="stat-value" id="stat-salary-base">-</div>
             <div class="stat-sub" id="stat-salary-date">As of -</div>
         </div>
-        <div class="stat-card purple">
+        <div class="stat-card">
             <div class="stat-label">Proj. Total Comp (2025)</div>
             <div class="stat-value" id="stat-total-comp">-</div>
             <div class="stat-sub">Base + Match + Bonus + Edu</div>
@@ -591,12 +586,12 @@
     </div>
 
     <div class="stats-grid">
-         <div class="stat-card orange">
+         <div class="stat-card">
             <div class="stat-label" id="card-nw-label">Projected Net Worth (10%)</div>
             <div class="stat-value" id="proj-nw-card">-</div>
             <div class="stat-sub">In 25 Years</div>
         </div>
-        <div class="stat-card orange">
+        <div class="stat-card">
             <div class="stat-label">Porsche Purchase</div>
             <div style="font-size:0.9em; font-weight:bold; margin-top:4px; color:var(--text);">$3M Goal</div>
             <div style="font-size:0.9em; font-weight:bold; color:var(--danger);">$300k Cost</div>
@@ -604,7 +599,7 @@
             <div class="stat-sub" id="proj-porsche-countdown" style="font-weight:bold; color:var(--primary); font-size:0.9em; margin-bottom:2px">-</div>
             <div class="stat-sub" id="proj-porsche-sub">Estimated Date</div>
         </div>
-         <div class="stat-card orange">
+         <div class="stat-card">
             <div class="stat-label">Beach House</div>
             <div style="font-size:0.9em; font-weight:bold; margin-top:4px; color:var(--text);">$10M Goal</div>
             <div style="font-size:0.9em; font-weight:bold; color:var(--danger);">$5M Cost</div>
