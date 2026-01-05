@@ -729,6 +729,57 @@
 
 <script>
     // ==========================================
+    // CUSTOM CHART PLUGINS
+    // ==========================================
+    
+    // Plugin to display Total Value in the center of a Doughnut Chart
+    const centerTextPlugin = {
+        id: 'centerText',
+        beforeDraw: function(chart) {
+            if (chart.config.type !== 'doughnut') return;
+            var width = chart.width,
+                height = chart.height,
+                ctx = chart.ctx;
+
+            ctx.restore();
+            
+            // Calculate total
+            var total = 0;
+            if(chart.config.data.datasets.length > 0) {
+                total = chart.config.data.datasets[0].data.reduce((a, b) => a + b, 0);
+            }
+            
+            var fontSize = (height / 140).toFixed(2); // Dynamic font size
+            
+            // Text 1: "Total" Label
+            ctx.font = fontSize + "em sans-serif"; // Use system sans-serif which matches Inter/Segoe
+            ctx.textBaseline = "middle";
+            ctx.fillStyle = document.body.classList.contains('sci-fi-mode') ? "rgba(255,255,255,0.6)" : "#7f8c8d";
+            
+            var text = "Total",
+                textX = Math.round((width - ctx.measureText(text).width) / 2),
+                textY = height / 2 - (height * 0.1); 
+
+            ctx.fillText(text, textX, textY);
+
+            // Text 2: The Value
+            var text2 = fmtMoneySimple(total);
+            
+            // Theme-aware color for the value
+            ctx.fillStyle = document.body.classList.contains('sci-fi-mode') ? "#ffffff" : "#2c3e50";
+            ctx.font = "bold " + (fontSize * 1.8) + "em sans-serif";
+            
+            var text2X = Math.round((width - ctx.measureText(text2).width) / 2),
+                text2Y = height / 2 + (height * 0.08); 
+            
+            ctx.fillText(text2, text2X, text2Y);
+            ctx.save();
+        }
+    };
+    
+    Chart.register(centerTextPlugin); // Register Globally
+
+    // ==========================================
     // FLUID STATUS BOX POSITIONING LOGIC
     // ==========================================
     function updateStatusPosition() {
@@ -1188,26 +1239,23 @@
         if (charts.compBreakdown) charts.compBreakdown.destroy();
         charts.compBreakdown = new Chart(document.getElementById('compBreakdownChart'), {
             type: 'doughnut',
-            plugins: [ChartDataLabels],
+            plugins: [ChartDataLabels, centerTextPlugin], // USE CENTER TEXT PLUGIN
             data: {
                 labels: ['Base Salary', 'Match', 'Education (YTD)', 'Bonus (YTD)'],
                 datasets: [{
                     data: [latest.salary, latest.matchAmt, latest.ytdEdu, latest.ytdBonus],
-                    backgroundColor: ['#5dade2', '#27ae60', '#e67e22', '#f1c40f']
+                    backgroundColor: ['#5dade2', '#27ae60', '#e67e22', '#f1c40f'],
+                    borderWidth: 0, // No border for cleaner ring look
+                    hoverOffset: 15 // Pop out on hover to simulate variable radius
                 }]
             },
             options: {
                 responsive: true, maintainAspectRatio: false,
+                cutout: '70%', // Make it a thin ring like the image
                 plugins: {
                     legend: { position: 'right' },
                     datalabels: {
-                        color: '#000000', 
-                        font: { weight: 'bold', size: isMobile ? 9 : 12 }, textAlign: 'center',
-                        formatter: (val, ctx) => {
-                            let sum = ctx.dataset.data.reduce((a, b) => a + b, 0);
-                            let pct = ((val*100) / sum).toFixed(1) + "%";
-                            return val > 0 ? fmtMoneySimple(val) + '\n(' + pct + ')' : '';
-                        }
+                        display: false // Hide data labels on the slices, use legend/center instead
                     }
                 }
             }
@@ -1595,7 +1643,8 @@
             },
             options: {
                 animation: isSilent ? false : {}, // Disable animation if silent update
-                responsive: true, maintainAspectRatio: false,
+                responsive: true,
+                maintainAspectRatio: false,
                 plugins: {
                     legend: { display: false },
                     datalabels: {
@@ -1802,11 +1851,25 @@
 
         if (charts.allocation) charts.allocation.destroy();
         charts.allocation = new Chart(document.getElementById('allocationChart'), {
-            type: 'doughnut', plugins: [ChartDataLabels],
-            data: { labels: allocLabels, datasets: [{ data: allocValues, backgroundColor: palette }] },
+            type: 'doughnut', // Changed to Doughnut for Center Text
+            plugins: [ChartDataLabels, centerTextPlugin], // Added Center Text Plugin
+            data: { labels: allocLabels, datasets: [{ 
+                data: allocValues, 
+                backgroundColor: palette,
+                borderWidth: 0, // No border for cleaner ring look
+                hoverOffset: 15 // Pop out on hover to simulate variable radius
+            }] },
             options: { 
-                animation: isSilent ? false : {}, // Disable animation if silent update
-                maintainAspectRatio: false, layout: { padding: 80 }, plugins: { legend: { display: false }, tooltip: { callbacks: { label: (ctx) => ctx.label + ': ' + fmtMoney(ctx.raw) + ' (' + ((ctx.raw/totalPortfolio)*100).toFixed(1) + '%)' } }, datalabels: { color: '#2c3e50', anchor: 'end', align: 'end', offset: 10, formatter: (val, ctx) => (val/totalPortfolio > 0.01) ? ctx.chart.data.labels[ctx.dataIndex] + '\n' + fmtMoneySimple(val) : '' } } }
+                animation: isSilent ? false : {}, 
+                maintainAspectRatio: false, 
+                cutout: '70%', // Make it a ring to hold text
+                layout: { padding: 20 }, // Reduced padding
+                plugins: { 
+                    legend: { display: false }, 
+                    tooltip: { callbacks: { label: (ctx) => ctx.label + ': ' + fmtMoney(ctx.raw) + ' (' + ((ctx.raw/totalPortfolio)*100).toFixed(1) + '%)' } }, 
+                    datalabels: { display: false } // Hide labels on the chart itself
+                } 
+            }
         });
 
         if (charts.balance) charts.balance.destroy();
