@@ -231,10 +231,9 @@
         .chart-container-tall { height: 480px; }
         .chart-container-small { height: 200px; } 
 
-        /* SALARY CHART SPECIFIC OVERRIDES */
-        /* Desktop: Increase height by 20% (350 * 1.2 = 420px) */
+        /* SPECIAL OVERRIDE: SALARY CHART SIZE */
         #salary-trend-container {
-            height: 420px; 
+            height: 420px; /* Laptop: 350px * 1.2 = 420px */
         }
 
         /* TradingView */
@@ -334,16 +333,16 @@
             .tv-card { height: 650px !important; }
             .chart-container { height: 250px !important; }
             .chart-container-tall { height: 550px !important; }
+            
+            /* SPECIAL OVERRIDE: SALARY CHART SIZE MOBILE */
+            #salary-trend-container { 
+                height: 500px !important; /* Mobile: 250px * 2 = 500px */
+            }
+
             .card { padding: 10px 5px; margin-bottom: 15px; }
             th, td { padding: 8px 4px; font-size: 0.75em; }
             .table-responsive { display: block; width: 100%; overflow-x: auto; }
             select#extrapolationRateSelect { max-width: 100%; font-size: 0.8em; }
-            
-            /* SALARY CHART MOBILE OVERRIDE */
-            /* Mobile: Increase height by 100% (250 * 2 = 500px) */
-            #salary-trend-container {
-                height: 500px !important;
-            }
         }
     </style>
 </head>
@@ -1210,11 +1209,12 @@
                     legend: { position: 'top' },
                     datalabels: {
                         color: '#000000', 
-                        rotation: isMobile ? -90 : 0, // UPDATED: Vertical on mobile, Horizontal on desktop
-                        align: 'center',
-                        anchor: 'center',
-                        font: { weight: 'bold', size: isMobile ? 10 : 11 }, 
-                        formatter: (val) => val > 1000 ? fmtMoneySimple(val) : ''
+                        font: { weight: 'bold', size: isMobile ? 6 : 8 }, 
+                        // Rotation: Horizontal on laptop, Vertical on Mobile
+                        rotation: isMobile ? -90 : 0,
+                        // Dynamic Checker: Use 'auto' to hide colliding labels
+                        display: 'auto',
+                        formatter: (val) => val > 500 ? fmtMoneySimple(val) : ''
                     }
                 },
                 scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true } }
