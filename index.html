@@ -1219,6 +1219,10 @@
                     datalabels: {
                         color: '#000000', 
                         font: { weight: 'bold', size: isMobile ? 6 : 8 }, 
+                        // Rotation: Horizontal on laptop, Vertical on Mobile
+                        rotation: isMobile ? -90 : 0,
+                        // Dynamic Checker: Use 'auto' to hide colliding labels
+                        display: 'auto',
                         formatter: (val) => val > 500 ? fmtMoneySimple(val) : ''
                     }
                 },
@@ -1642,12 +1646,28 @@
             } else {
                  const isZero = (entry.marketGain === 0);
                  const gainClass = entry.marketGain >= 0 ? 'text-green' : 'text-red';
-                 let warning = "";
-                 // If it is VIGIX/VTSAX on the Live row, always show (Daily) tag
-                 if(entry.isLive && (entry.invested.includes('VIGIX') || entry.invested.includes('VTSAX'))) {
-                     warning = ' <span style="color:#f39c12; font-size:0.7em;">(Daily)</span>';
+                 
+                 // Base Value
+                 const valHtml = `<span class="${gainClass}">${entry.marketGain >= 0 ? '+' : ''}${fmtMoney(entry.marketGain + entry.income)}</span>`;
+                 
+                 let dailyTagHtml = "";
+                 if(entry.isLive) {
+                     // Daily Tag with Indicator
+                     // Box style similar to ticker-tag
+                     // Indicator: Green dot
+                     dailyTagHtml = `
+                     <div style="margin-top:2px;">
+                        <span class="ticker-tag" style="font-size:0.7em; padding:1px 5px; display:inline-flex; align-items:center; gap:4px; vertical-align:middle;">
+                            Daily 
+                            <span style="width:6px; height:6px; background-color:var(--success); border-radius:50%; display:inline-block;" title="Market Data Updated"></span>
+                        </span>
+                     </div>`;
                  }
-                 marketGainDisplay = `<span class="${gainClass}">${entry.marketGain >= 0 ? '+' : ''}${fmtMoney(entry.marketGain + entry.income)}</span>${warning}`;
+
+                 marketGainDisplay = `<div style="display:flex; flex-direction:column; align-items:flex-end;">
+                    ${valHtml}
+                    ${dailyTagHtml}
+                 </div>`;
             }
 
             tr.innerHTML = `
