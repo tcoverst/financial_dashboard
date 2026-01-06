@@ -23,12 +23,12 @@
             --success: #27ae60;
             --danger: #c0392b;
             --bg: #ecf0f1;
-            --card-bg: rgba(255, 255, 255, 0.9); /* Slight transparency for light mode too */
+            --card-bg: rgba(255, 255, 255, 0.9); 
             --text: #2c3e50;
             --accent: #8e44ad;
             --goal: #e67e22;
-            --border-color: rgba(0,0,0,0.1); /* Darker border for visibility without shadow */
-            --crosshair-color: rgba(0,0,0,0.2); /* Tech decoration color */
+            --border-color: rgba(0,0,0,0.1); 
+            --crosshair-color: rgba(0,0,0,0.2); 
             --th-bg: rgba(0,0,0,0.03);
             --hover-bg: rgba(0,0,0,0.02);
             
@@ -68,7 +68,7 @@
         }
 
         /* =========================================
-           GLOBAL STRUCTURAL STYLES (Matches Sci-Fi Layout)
+           GLOBAL STRUCTURAL STYLES
            ========================================= */
         
         html, body { overflow-x: hidden; }
@@ -83,7 +83,6 @@
             transition: background-color 0.5s ease, color 0.5s ease;
         }
 
-        /* WIDER CONTAINER (Standardized) */
         .container { 
             max-width: 1600px; 
             margin: 0 auto; 
@@ -91,19 +90,15 @@
             transition: max-width 0.5s ease; 
         }
         
-        /* TECH LOOK FOR CARDS (Sharp corners, borders, decorations) */
-        .card, 
-        .stat-card,
-        header {
-            border-radius: 0px; /* Sharp technical corners */
+        .card, .stat-card, header {
+            border-radius: 0px; 
             border: 1px solid var(--border-color);
-            box-shadow: none; /* Removed shadow for flat tech look */
+            box-shadow: none; 
             background: var(--card-bg);
-            backdrop-filter: blur(10px); /* Frosted glass look */
+            backdrop-filter: blur(10px); 
             position: relative;
         }
 
-        /* TECH DECORATION: Corner Crosshairs */
         .card::before {
             content: '+';
             position: absolute;
@@ -114,11 +109,10 @@
             pointer-events: none;
         }
 
-        /* TYPOGRAPHY (Uppercase Technical Headers) */
         h1, h3, .section-header {
             text-transform: uppercase;
             letter-spacing: 2px;
-            font-weight: 300; /* Lighter weight for tech look */
+            font-weight: 300; 
         }
 
         h1 { margin: 0; font-size: 24px; color: var(--primary); line-height: 1.2; }
@@ -136,19 +130,43 @@
             flex-wrap: wrap;
         }
 
-        .stat-value {
-            letter-spacing: -1px;
-        }
+        .stat-value { letter-spacing: -1px; }
 
         /* =========================================
-           COMPONENT STYLES
+           FIXED UI ELEMENTS
            ========================================= */
+
+        /* THEME TOGGLE (Right Anchor) */
+        .theme-toggle {
+            position: fixed;
+            top: 15px;
+            right: 15px; /* Base Anchor Point */
+            width: 32px;  
+            height: 32px; 
+            background: var(--primary);
+            color: white; 
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            z-index: 1000; /* Highest priority */
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+            border: 2px solid white;
+            transition: transform 0.2s;
+        }
+        .theme-toggle:hover { transform: scale(1.1); }
+        .theme-toggle svg { width: 16px; height: 16px; fill: currentColor; }
 
         /* FLOATING STATUS BOX */
         .status-floater {
             position: fixed;
-            /* Remove manual Left positioning, anchor to Right */
-            right: 60px; /* 15px (toggle margin) + 32px (toggle width) + 13px (gap) */
+            /* LAPTOP DEFAULT POSITION:
+               Anchor to right to ensure side-by-side with toggle.
+               Right = 15px (Toggle Margin) + 32px (Toggle Width) + 20px (Gap) + Extra Offset 
+            */
+            right: 120px; /* Moves it "a little more to the left" on laptop */
+            
             background: var(--card-bg);
             padding: 10px 15px;
             border-radius: 0px; 
@@ -157,36 +175,9 @@
             backdrop-filter: blur(5px);
             text-align: right;
             
-            /* ONLY animate TOP. X-axis is fixed by 'right' property */
+            /* Only animate TOP. X is fixed via CSS 'right' */
             will-change: top; 
         }
-
-        /* UTILITY: DISABLE TRANSITION FOR IMMEDIATE UPDATES */
-        .status-floater.no-transition {
-            transition: none !important;
-        }
-
-        /* THEME TOGGLE BUTTON */
-        .theme-toggle {
-            position: fixed;
-            top: 15px;
-            right: 15px;
-            width: 32px;  
-            height: 32px; 
-            background: var(--primary);
-            color: white; /* Always white icon on colored button */
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            z-index: 999;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
-            border: 2px solid white;
-            transition: transform 0.2s;
-        }
-        .theme-toggle:hover { transform: scale(1.1); }
-        .theme-toggle svg { width: 16px; height: 16px; fill: currentColor; }
 
         /* Headers Layout */
         header {
@@ -212,11 +203,7 @@
             gap: 15px;
             margin-bottom: 30px;
         }
-        .stat-card {
-            padding: 20px;
-            /* Left colored borders removed */
-            min-width: 0; 
-        }
+        .stat-card { padding: 20px; min-width: 0; }
         
         .stat-label { font-size: 0.85em; color: #7f8c8d; text-transform: uppercase; letter-spacing: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .stat-value { font-size: 1.8em; font-weight: 700; color: var(--primary); margin-top: 5px; word-break: break-word; }
@@ -236,9 +223,7 @@
         .chart-container-small { height: 200px; } 
 
         /* SPECIAL OVERRIDE: SALARY CHART SIZE */
-        #salary-trend-container {
-            height: 420px; /* Laptop: 350px * 1.2 = 420px */
-        }
+        #salary-trend-container { height: 420px; }
 
         /* TradingView */
         .tv-card { height: 850px; margin-bottom: 50px; overflow: hidden; display: flex; flex-direction: column; padding: 0; }
@@ -259,21 +244,20 @@
         
         th { 
             background-color: var(--th-bg); 
-            color: var(--primary); /* Uses theme primary */
+            color: var(--primary); 
             text-transform: uppercase; 
             font-size: 0.75em; 
             letter-spacing: 1px;
             font-weight: 600; 
         }
         tr:hover { background-color: var(--hover-bg); }
-        
         .table-compact th, .table-compact td { padding: 5px 6px; font-size: 0.85em; }
 
         .ticker-tag {
             background: rgba(41, 128, 185, 0.1);
             color: #2980b9;
             padding: 2px 6px;
-            border-radius: 4px; /* Tag remains rounded for contrast */
+            border-radius: 4px;
             font-size: 0.85em;
             font-weight: 600;
             display: inline-block;
@@ -287,7 +271,7 @@
             display: flex; gap: 15px; flex-wrap: wrap; margin-bottom: 15px;
             background: var(--hover-bg);
             padding: 10px;
-            border-radius: 4px; /* Slight rounding for controls */
+            border-radius: 4px;
             border: 1px solid var(--border-color);
         }
         .filter-label { font-size: 0.85em; font-weight: bold; color: #7f8c8d; margin-right: 10px; align-self: center; }
@@ -326,16 +310,23 @@
 
         @media (max-width: 768px) {
             body { padding: 5px; }
-            /* Mobile adjustment for status if docked */
-            .status-floater.mobile-dock { 
-                /* Override not needed for X-axis since 'right' is fixed, 
-                   but we keep padding/styling consistent */
+            
+            /* MOBILE STATUS OVERRIDE */
+            /* Force Fixed Position Side-by-Side with Toggle */
+            .status-floater {
+                top: 15px !important; /* Aligned with Toggle Top */
+                right: 60px !important; /* 15px margin + 32px toggle + ~13px gap */
                 padding: 6px 12px; 
+                position: fixed !important;
+                /* Reset transition because it never moves on mobile */
+                transition: none !important;
             }
             
             header { padding: 15px; flex-direction: column; align-items: flex-start; }
             header > div:first-child { width: 100%; }
-            #status-placeholder { width: 100%; height: 50px; margin-top: 10px; }
+            /* Placeholder effectively disappears visually/space-wise if widget is fixed top */
+            #status-placeholder { width: 100%; height: 50px; margin-top: 10px; display: none; } 
+
             .stats-grid { grid-template-columns: 1fr 1fr; gap: 10px; } 
             .stat-card { padding: 12px 10px; }
             .stat-value { font-size: 1.4em; }
@@ -343,12 +334,7 @@
             .tv-card { height: 650px !important; }
             .chart-container { height: 250px !important; }
             .chart-container-tall { height: 550px !important; }
-            
-            /* SPECIAL OVERRIDE: SALARY CHART SIZE MOBILE */
-            #salary-trend-container { 
-                height: 500px !important; /* Mobile: 250px * 2 = 500px */
-            }
-
+            #salary-trend-container { height: 500px !important; }
             .card { padding: 10px 5px; margin-bottom: 15px; }
             th, td { padding: 8px 4px; font-size: 0.75em; }
             .table-responsive { display: block; width: 100%; overflow-x: auto; }
@@ -364,7 +350,7 @@
     </svg>
 </div>
 
-<div id="status-floater" class="status-floater" style="top: -100px;">
+<div id="status-floater" class="status-floater">
     <div style="font-size: 0.9em; font-weight: bold; color: var(--danger);" id="latest-date-display">
         <span class="live-dot"></span>Connecting...
     </div>
@@ -695,41 +681,39 @@
         const placeholder = document.getElementById('status-placeholder');
         if (!floater || !placeholder) return;
 
+        // --- MOBILE MODE (<= 768px) ---
+        if (window.innerWidth <= 768) {
+            // CSS handles fixed position completely on mobile.
+            // Reset any inline styles that JS might have added during desktop resize
+            if(floater.style.top !== '15px') floater.style.top = '15px';
+            return; 
+        }
+
+        // --- DESKTOP/LAPTOP MODE ---
         const scrollY = window.scrollY;
         const threshold = 50; 
-        const isMobile = window.innerWidth <= 768;
-
-        const dockTop = isMobile ? 70 : 20; // 20px on laptop
+        const dockTop = 20; 
         const shouldDock = scrollY > threshold;
 
-        // X-Axis is handled purely by CSS (right: 60px)
-        // We only animate 'top' here.
-
         if (shouldDock) {
-            // DOCKED MODE
+            // DOCKED (Sticky Top)
             floater.style.top = dockTop + 'px';
             
             if (!isDockedState) {
-                // Animate INTO the docked position
-                // Only animate 'top', 'right' is fixed in CSS
                 floater.style.transition = 'top 0.5s cubic-bezier(0.2, 0.8, 0.2, 1)';
                 isDockedState = true;
-                floater.classList.add('mobile-dock');
             }
         } else {
-            // EMBEDDED MODE
+            // EMBEDDED (In Header)
             const pRect = placeholder.getBoundingClientRect();
-            
-            // We use pRect.top which is relative to viewport, perfect for fixed positioning
             floater.style.top = pRect.top + 'px';
             
             if (isDockedState) {
-                // SWITCHING BACK: Snap instantly to feel "sticky" and rigid
+                // Return transition
                 floater.style.transition = 'none';
                 isDockedState = false;
-                floater.classList.remove('mobile-dock');
             } else {
-                // SCROLLING: Keep transition disabled to track perfectly
+                // Tracking transition
                 floater.style.transition = 'none';
             }
         }
@@ -738,7 +722,6 @@
     // Initialization Safety Check
     function initStatusFloater() {
         updateStatusPosition();
-        // Recalculate after a short delay to ensure layout/fonts are settled
         setTimeout(updateStatusPosition, 100);
         setTimeout(updateStatusPosition, 500);
     }
