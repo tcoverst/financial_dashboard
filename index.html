@@ -1532,19 +1532,18 @@
                     currentYearStats = { year: year, startBal: balance, annualContrib: 0, annualGrowth: 0 };
                 }
 
-                if (i > 0) { 
-                    // Raise Logic: Calculate dollar raise based on modeled salary, add 100% to contribution
-                    let raiseAmt = 0;
-                    if (date.getMonth() === 0) {
-                        raiseAmt = modeledSalaryCheck * globalJanRaise;
-                        modeledSalaryCheck += raiseAmt;
-                        currentPaycheck += raiseAmt;
-                    }
-                    if (date.getMonth() === 6) {
-                        raiseAmt = modeledSalaryCheck * globalJulyRaise;
-                        modeledSalaryCheck += raiseAmt;
-                        currentPaycheck += raiseAmt;
-                    }
+                // Raise Logic: Calculate dollar raise based on modeled salary, add 100% to contribution
+                // REMOVED 'i > 0' check to allow raise to apply in Month 0 if starting in Jan/July
+                let raiseAmt = 0;
+                if (date.getMonth() === 0) {
+                    raiseAmt = modeledSalaryCheck * globalJanRaise;
+                    modeledSalaryCheck += raiseAmt;
+                    currentPaycheck += raiseAmt;
+                }
+                if (date.getMonth() === 6) {
+                    raiseAmt = modeledSalaryCheck * globalJulyRaise;
+                    modeledSalaryCheck += raiseAmt;
+                    currentPaycheck += raiseAmt;
                 }
 
                 // Determine Paychecks in this specific month
