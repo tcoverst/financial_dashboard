@@ -364,6 +364,13 @@
             margin-right: 5px;
             animation: pulse 1.5s infinite;
         }
+        
+        /* LAYOUT HELPER FOR BREAKDOWN */
+        .breakdown-grid {
+            display: grid; 
+            grid-template-columns: 1fr 1fr; 
+            gap: 20px;
+        }
 
         /* RESPONSIVE */
         @media (max-width: 900px) { 
@@ -399,6 +406,9 @@
             th, td { padding: 8px 4px; font-size: 0.75em; }
             .table-responsive { display: block; width: 100%; overflow-x: auto; }
             select#extrapolationRateSelect { max-width: 100%; font-size: 0.8em; }
+            
+            /* STACK BREAKDOWN ON MOBILE */
+            .breakdown-grid { grid-template-columns: 1fr; }
         }
     </style>
 </head>
@@ -695,7 +705,7 @@
         <h3 style="margin-bottom:15px; border-bottom:1px solid var(--border-color); padding-bottom:10px;">Detailed Projection Breakdown</h3>
         
         <div style="background:var(--bg); padding:15px; border-radius:6px; margin-bottom:20px; font-size:0.9em; line-height:1.6; color:var(--text); border:1px solid var(--border-color);">
-            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:20px;">
+            <div class="breakdown-grid">
                 <div>
                     <strong style="color:var(--primary); text-transform:uppercase;">1. The Math Behind the Numbers</strong><br>
                     Future values are calculated using monthly compounding:<br>
@@ -711,7 +721,7 @@
                 <div>
                     <strong style="color:var(--primary); text-transform:uppercase;">2. Contribution Assumptions</strong><br>
                     <ul>
-                        <li><strong>Baseline Contribution:</strong> Derived from the most recent month's total inflow (Deposits + Income), divided by the number of paychecks in that specific month to find a "per paycheck" average.</li>
+                        <li><strong>Baseline Per Paycheck:</strong> <span id="per-paycheck-amt" style="font-weight:bold; color:var(--success)">-</span> (Derived from last month's inflow)</li>
                         <li><strong>Payday Anchor:</strong> The date selected (e.g., Jan 10, 2026) determines exactly which months have 3 paychecks vs. 2. The model adjusts monthly contributions accordingly.</li>
                     </ul>
                 </div>
@@ -1463,6 +1473,11 @@
         if(paychecksInBaseline < 2) paychecksInBaseline = 2; 
         
         let paycheckAmount = startInflow / paychecksInBaseline;
+        
+        // UPDATE UI WITH CALCULATED PAYCHECK AMOUNT
+        const ppEl = document.getElementById('per-paycheck-amt');
+        if(ppEl) ppEl.innerText = fmtMoney(paycheckAmount);
+
         // ----------------------------------------
 
         const labels = [];
