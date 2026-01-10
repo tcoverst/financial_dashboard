@@ -721,7 +721,7 @@
                 <div>
                     <strong style="color:var(--primary); text-transform:uppercase;">2. Contribution Assumptions</strong><br>
                     <ul>
-                        <li><strong>Baseline Per Paycheck:</strong> <span id="per-paycheck-amt" style="font-weight:bold; color:var(--success)">-</span> (Start of Projection)</li>
+                        <li><strong>Baseline Per Paycheck:</strong> <span id="per-paycheck-amt" style="font-weight:bold; color:var(--success)">-</span> (Adjusted for Jan Raise)</li>
                         <li><strong>Payday Anchor:</strong> The date selected (e.g., Jan 10, 2026) determines exactly which months have 3 paychecks vs. 2. The model adjusts monthly contributions accordingly.</li>
                     </ul>
                 </div>
@@ -851,6 +851,7 @@
     let globalJanRaise = 0.06;
     let globalJulyRaise = 0.03;
     let globalLatestBaseSalary = 130000; // Default fallback, updated by salary data
+    let globalPrevBaseSalary = 110300; // Track previous for delta calculation
 
     function toggleTheme() {
         isSciFiMode = !isSciFiMode;
@@ -1274,9 +1275,11 @@
 
         if (data.length === 0) return;
         const latest = data[data.length - 1];
+        const previous = data.length > 1 ? data[data.length - 2] : latest;
         
         // UPDATE GLOBAL BASE SALARY FOR PROJECTIONS
         globalLatestBaseSalary = latest.salary;
+        globalPrevBaseSalary = previous.salary;
         
         document.getElementById('stat-salary-base').innerText = fmtMoney(latest.salary);
         document.getElementById('stat-salary-date').innerText = "Effective: " + latest.date;
@@ -1456,6 +1459,8 @@
         
         // --- SMART BASE PAYCHECK CALCULATION ---
         let baselineMonthDate = new Date(currentDate);
+        // Force calculation on the LAST COMPLETE MONTH (Dec) to get stable baseline
+        // If data is Jan 2026, currentDate is Jan 1. previous is Dec.
         baselineMonthDate.setMonth(baselineMonthDate.getMonth() - 1); 
         
         let blStart = new Date(baselineMonthDate.getFullYear(), baselineMonthDate.getMonth(), 1);
@@ -1470,23 +1475,20 @@
             blTracker.setDate(blTracker.getDate() + 14);
         }
         
-        if(paychecksInBaseline < 2) paychecksInBaseline = 2; 
+        if(paychecksInBaseline < 1) paychecksInBaseline = 2; // Fallback
         
+        // Use the Invested Inflow (passed in) divided by paychecks count
         let paycheckAmount = startInflow / paychecksInBaseline;
         
-        // --- PRE-CALCULATE INITIAL RAISE FOR DISPLAY & BASELINE ACCURACY ---
-        // If projection starts in Jan/July, the 'baseline' displayed should imply the raise is active.
-        let initialRaiseAmt = 0;
-        let modeledSalaryForDisplay = globalLatestBaseSalary / 26;
+        // --- FORCE RAISE APPLICATION ---
+        // The baseline is derived from Dec 2025 (pre-raise).
+        // The Projection starts Jan 2026 (post-raise).
+        // We calculate the Dollar Delta of the raise explicitly.
+        let raiseDelta = (globalLatestBaseSalary - globalPrevBaseSalary) / 26;
+        if(raiseDelta < 0) raiseDelta = 0; // Safety
         
-        if (currentDate.getMonth() === 0) { // Jan
-             initialRaiseAmt = modeledSalaryForDisplay * globalJanRaise;
-        } else if (currentDate.getMonth() === 6) { // July
-             initialRaiseAmt = modeledSalaryForDisplay * globalJulyRaise;
-        }
-        
-        // Apply initial raise to the Baseline Variable used for Display
-        let displayPaycheckAmount = paycheckAmount + initialRaiseAmt;
+        // Apply the raise to the starting paycheck amount for the projection
+        let displayPaycheckAmount = paycheckAmount + raiseDelta;
         
         // UPDATE UI WITH ADJUSTED PAYCHECK AMOUNT
         const ppEl = document.getElementById('per-paycheck-amt');
@@ -1532,9 +1534,10 @@
 
         rates.forEach((rate, idx) => {
             let balance = startBalance;
-            let currentPaycheck = paycheckAmount; // Start with historical baseline
+            // Initialize with the POST-RAISE amount
+            let currentPaycheck = displayPaycheckAmount; 
             
-            // "Save the Raise" tracking
+            // "Save the Raise" tracking - Start from current high salary
             let modeledSalaryCheck = globalLatestBaseSalary / 26; 
 
             // Independent Tracker for Paydays for this Rate simulation
@@ -1561,21 +1564,20 @@
                     currentYearStats = { year: year, startBal: balance, annualContrib: 0, annualGrowth: 0 };
                 }
 
-                // Raise Logic: Calculate dollar raise based on modeled salary, add 100% to contribution
-                let raiseAmt = 0;
-                
-                // NOTE: We allow this to run on i=0 (Month 0) because we initialized `currentPaycheck` 
-                // with the historical `paycheckAmount` (pre-raise). This loop will naturally bump it up 
-                // for the very first data point if it falls in Jan/July, matching the display logic above.
-                if (date.getMonth() === 0) {
-                    raiseAmt = modeledSalaryCheck * globalJanRaise;
-                    modeledSalaryCheck += raiseAmt;
-                    currentPaycheck += raiseAmt;
-                }
-                if (date.getMonth() === 6) {
-                    raiseAmt = modeledSalaryCheck * globalJulyRaise;
-                    modeledSalaryCheck += raiseAmt;
-                    currentPaycheck += raiseAmt;
+                // Future Raises (Beyond the initial Jan one which is baked in)
+                // We skip the first Jan check (i=0) because we manually added that raise to 'currentPaycheck' above
+                if (i > 0) {
+                    let raiseAmt = 0;
+                    if (date.getMonth() === 0) {
+                        raiseAmt = modeledSalaryCheck * globalJanRaise;
+                        modeledSalaryCheck += raiseAmt;
+                        currentPaycheck += raiseAmt;
+                    }
+                    if (date.getMonth() === 6) {
+                        raiseAmt = modeledSalaryCheck * globalJulyRaise;
+                        modeledSalaryCheck += raiseAmt;
+                        currentPaycheck += raiseAmt;
+                    }
                 }
 
                 // Determine Paychecks in this specific month
@@ -2076,10 +2078,27 @@
         document.getElementById('stat-monthly-inflow').innerText = fmtMoney(totalInflow);
         document.getElementById('stat-monthly-inflow-sub').innerHTML = `Income: ${fmtMoney(lastIncome)} <span style="margin:0 4px; color:#ccc">|</span> Net Dep: ${fmtMoney(lastDeposits)}`;
 
-        let projectionInflow = totalInflow; 
-        if (lastIndex > 0) projectionInflow = globalTotals.income[lastIndex - 1] + globalTotals.deposits[lastIndex - 1];
+        // ==========================================
+        // PROJECTION INFLOW ADJUSTMENT
+        // ==========================================
+        // Calculate inflow specifically for INVESTMENTS (Vanguard A + B), ignoring Cash (Wells) and UTMA
+        // We use the LAST COMPLETE MONTH (lastIndex - 1, usually December) as the stable baseline.
+        let investmentInflow = 0;
+        if (lastIndex > 0) {
+            const baselineMonth = sortedMonths[lastIndex - 1]; // December
+            accounts.forEach(acc => {
+                if (acc.id === 'vanguardA' || acc.id === 'vanguardB' || acc.id === 'fidelity') {
+                    const entry = alignedData[acc.id].find(d => d.key === baselineMonth);
+                    if (entry) {
+                        investmentInflow += entry.deposits + entry.income;
+                    }
+                }
+            });
+        } else {
+            investmentInflow = totalInflow; // Fallback
+        }
         
-        renderProjectionChart(globalTotals.balance[lastIndex], projectionInflow, sortedMonths[lastIndex], isSilent);
+        renderProjectionChart(globalTotals.balance[lastIndex], investmentInflow, sortedMonths[lastIndex], isSilent);
 
         const stackedDatasets = accounts.map((acc, index) => {
             const color = palette[index % palette.length];
