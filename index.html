@@ -721,7 +721,7 @@
                 <div>
                     <strong style="color:var(--primary); text-transform:uppercase;">2. Contribution Assumptions</strong><br>
                     <ul>
-                        <li><strong>Baseline Per Paycheck:</strong> <span id="per-paycheck-amt" style="font-weight:bold; color:var(--success)">-</span> (Derived from last month's inflow)</li>
+                        <li><strong>Baseline Per Paycheck:</strong> <span id="per-paycheck-amt" style="font-weight:bold; color:var(--success)">-</span> (Start of Projection)</li>
                         <li><strong>Payday Anchor:</strong> The date selected (e.g., Jan 10, 2026) determines exactly which months have 3 paychecks vs. 2. The model adjusts monthly contributions accordingly.</li>
                     </ul>
                 </div>
@@ -1474,9 +1474,23 @@
         
         let paycheckAmount = startInflow / paychecksInBaseline;
         
-        // UPDATE UI WITH CALCULATED PAYCHECK AMOUNT
+        // --- PRE-CALCULATE INITIAL RAISE FOR DISPLAY & BASELINE ACCURACY ---
+        // If projection starts in Jan/July, the 'baseline' displayed should imply the raise is active.
+        let initialRaiseAmt = 0;
+        let modeledSalaryForDisplay = globalLatestBaseSalary / 26;
+        
+        if (currentDate.getMonth() === 0) { // Jan
+             initialRaiseAmt = modeledSalaryForDisplay * globalJanRaise;
+        } else if (currentDate.getMonth() === 6) { // July
+             initialRaiseAmt = modeledSalaryForDisplay * globalJulyRaise;
+        }
+        
+        // Apply initial raise to the Baseline Variable used for Display
+        let displayPaycheckAmount = paycheckAmount + initialRaiseAmt;
+        
+        // UPDATE UI WITH ADJUSTED PAYCHECK AMOUNT
         const ppEl = document.getElementById('per-paycheck-amt');
-        if(ppEl) ppEl.innerText = fmtMoney(paycheckAmount);
+        if(ppEl) ppEl.innerText = fmtMoney(displayPaycheckAmount);
 
         // ----------------------------------------
 
@@ -1518,7 +1532,7 @@
 
         rates.forEach((rate, idx) => {
             let balance = startBalance;
-            let currentPaycheck = paycheckAmount; 
+            let currentPaycheck = paycheckAmount; // Start with historical baseline
             
             // "Save the Raise" tracking
             let modeledSalaryCheck = globalLatestBaseSalary / 26; 
@@ -1548,8 +1562,11 @@
                 }
 
                 // Raise Logic: Calculate dollar raise based on modeled salary, add 100% to contribution
-                // REMOVED 'i > 0' check to allow raise to apply in Month 0 if starting in Jan/July
                 let raiseAmt = 0;
+                
+                // NOTE: We allow this to run on i=0 (Month 0) because we initialized `currentPaycheck` 
+                // with the historical `paycheckAmount` (pre-raise). This loop will naturally bump it up 
+                // for the very first data point if it falls in Jan/July, matching the display logic above.
                 if (date.getMonth() === 0) {
                     raiseAmt = modeledSalaryCheck * globalJanRaise;
                     modeledSalaryCheck += raiseAmt;
