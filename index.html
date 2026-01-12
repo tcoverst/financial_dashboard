@@ -147,13 +147,13 @@
 
         /* FLOATING STATUS BOX */
         .status-floater {
-            /* Desktop Default: Fixed Position logic remains the same for desktop if needed, 
-               but we will switch to absolute/fixed toggling for smoother mobile perf */
+            /* Position Absolute allows it to scroll with the page natively (no jitter) */
             position: absolute; 
-            right: 60px; /* Aligned left of theme toggle (15px + 32px + 13px gap) */
+            /* X Axis is fixed by CSS to align with theme switch logic */
+            right: 60px; 
             background: var(--card-bg);
             padding: 10px 15px;
-            border-radius: 0px; 
+            border-radius: 0px; /* Sharp corners here too */
             border: 1px solid var(--border-color);
             z-index: 998;
             backdrop-filter: blur(5px);
@@ -161,14 +161,14 @@
             display: flex;
             flex-direction: column;
             align-items: flex-end;
-            /* No transition on top/left to prevent fighting with scroll */
+            /* Smooth transition only for top when docking occurs */
+            transition: top 0.3s ease;
         }
         
-        /* DOCKED STATE (Fixed to Top) */
+        /* DOCKED STATE: Locks to top of screen */
         .status-floater.docked {
             position: fixed;
-            top: 15px !important; /* Aligns with Theme Toggle top */
-            right: 60px;
+            top: 15px !important; /* Aligned with Theme Switch */
         }
 
         .refresh-btn {
@@ -225,8 +225,6 @@
         }
 
         header > div:first-child { width: auto; }
-        
-        /* Placeholder determines the "Static" start position */
         #status-placeholder { width: 260px; height: 50px; pointer-events: none; flex-shrink: 0; }
         
         .subtitle { color: #7f8c8d; font-size: 0.9em; margin-top: 5px; letter-spacing: 0.5px; }
@@ -385,29 +383,21 @@
         @media (max-width: 768px) {
             body { padding: 5px; }
             
-            /* MOBILE STATUS FLOATER OPTIMIZATION */
-            .status-floater {
-                /* Reduce size significantly */
-                padding: 4px 8px;
-                right: 55px; /* Adjust slightly for cleaner gap */
-                max-width: 140px; /* Prevent it from getting too wide */
-            }
-            .status-floater #latest-date-display {
-                font-size: 0.65em !important; /* Smaller text */
-                margin-bottom: 2px !important;
-                white-space: nowrap;
-            }
-            .status-floater .refresh-btn {
-                font-size: 0.65em !important;
-                padding: 1px 5px !important;
-            }
-            .status-floater #refresh-timer {
-                font-size: 0.6em !important;
-            }
-
             header { padding: 15px; flex-direction: column; align-items: flex-start; }
             header > div:first-child { width: 100%; }
+            /* Adjusted placeholder to ensure enough space for the status floater when embedded */
             #status-placeholder { width: 100%; height: 50px; margin-top: 10px; }
+            
+            /* Status Floater Mobile Overrides */
+            .status-floater {
+                right: 60px; /* Keep to left of theme switch */
+                padding: 4px 8px; /* Reduce size */
+                font-size: 0.75rem; /* Reduce font size */
+                width: auto;
+            }
+            .status-floater #latest-date-display { font-size: 1em; margin-bottom: 2px; }
+            .status-floater .refresh-btn { font-size: 1em; padding: 1px 6px; }
+            
             .stats-grid { grid-template-columns: 1fr 1fr; gap: 10px; } 
             .stat-card { padding: 12px 10px; }
             .stat-value { font-size: 1.4em; }
@@ -439,7 +429,7 @@
     </svg>
 </div>
 
-<div id="status-floater" class="status-floater">
+<div id="status-floater" class="status-floater" style="top: 0px;">
     <div style="font-size: 0.9em; font-weight: bold; color: var(--danger); margin-bottom: 5px;" id="latest-date-display">
         <span class="live-dot"></span>Connecting...
     </div>
@@ -800,10 +790,28 @@
     // FLUID STATUS BOX POSITIONING LOGIC
     // ==========================================
     let isDockedState = false; 
+    let initialPlaceholderTop = 0;
+    let isInitialized = false;
     let scrollRaf = null;
 
-    // We calculate the logical "Start" position once
-    let placeholderTop = 0;
+    function measurePlaceholder() {
+        const placeholder = document.getElementById('status-placeholder');
+        const floater = document.getElementById('status-floater');
+        if (!placeholder || !floater) return;
+
+        // Get the absolute position of the placeholder relative to document
+        const rect = placeholder.getBoundingClientRect();
+        const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+        initialPlaceholderTop = rect.top + scrollTop;
+        
+        // If not docked, explicitly set the absolute top
+        // This ensures on resize it snaps to the correct new location
+        if (!floater.classList.contains('docked')) {
+            floater.style.top = initialPlaceholderTop + 'px';
+        }
+        
+        isInitialized = true;
+    }
 
     function onScroll() {
         if (!scrollRaf) {
@@ -815,54 +823,50 @@
     }
 
     function updateStatusPosition() {
+        if (!isInitialized) measurePlaceholder();
+
         const floater = document.getElementById('status-floater');
-        const placeholder = document.getElementById('status-placeholder');
-        if (!floater || !placeholder) return;
+        if (!floater) return;
 
-        // Calculate placeholder top relative to document if not set
-        // (Re-calculate on resize or initial load)
-        const rect = placeholder.getBoundingClientRect();
-        const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
-        const absoluteTop = rect.top + scrollTop;
+        const scrollY = window.scrollY;
+        // The dock position is 15px (to align with theme switch)
+        // We dock when we scroll PAST the placeholder's original position minus the desired top offset
+        const dockThreshold = initialPlaceholderTop - 15;
 
-        // The point at which we want to snap to fixed (Theme switch is top:15px)
-        // We want to snap when the window scroll passes the placeholder's original position minus the 15px gap
-        const dockThreshold = absoluteTop - 15; 
-
-        if (scrollTop >= dockThreshold) {
-            // DOCKED MODE (Fixed)
+        if (scrollY > dockThreshold) {
             if (!isDockedState) {
                 floater.classList.add('docked');
-                floater.style.top = ''; // Clear inline style so CSS class takes over
+                // Remove inline style so CSS class takes over 'top'
+                floater.style.top = ''; 
                 isDockedState = true;
             }
         } else {
-            // NORMAL MODE (Absolute)
-            if (isDockedState || floater.style.position !== 'absolute') {
+            if (isDockedState) {
                 floater.classList.remove('docked');
-                floater.style.position = 'absolute';
-                floater.style.top = absoluteTop + 'px';
+                // Restore absolute position
+                floater.style.top = initialPlaceholderTop + 'px';
                 isDockedState = false;
             }
         }
     }
 
-    // Initialization Safety Check
-    function initStatusFloater() {
-        // Initial Calculation
-        updateStatusPosition();
-        setTimeout(updateStatusPosition, 100);
-    }
-
     // Bind Events
     window.addEventListener('scroll', onScroll);
     window.addEventListener('resize', () => {
-        // Reset state on resize to force recalculation
-        isDockedState = false; 
-        updateStatusPosition(); 
+        measurePlaceholder();
+        updateStatusPosition();
     });
-    window.addEventListener('DOMContentLoaded', initStatusFloater);
-    window.onload = initStatusFloater;
+    window.addEventListener('DOMContentLoaded', () => {
+        // Slight delay to ensure layout is stable
+        setTimeout(() => {
+            measurePlaceholder();
+            updateStatusPosition();
+        }, 100);
+    });
+    window.onload = () => {
+        measurePlaceholder();
+        updateStatusPosition();
+    };
 
 
     // ==========================================
@@ -894,11 +898,8 @@
             processAndRender(globalAccountsData, true);
         }
         
-        // Temporarily disable transition during theme switch to prevent floating
-        const floater = document.getElementById('status-floater');
-        if(floater) floater.style.transition = 'none';
-        
-        updateStatusPosition();
+        // Measure again as layout might change slightly with fonts/borders
+        setTimeout(measurePlaceholder, 300);
     }
 
     function hexToRgba(hex, alpha) {
