@@ -380,30 +380,41 @@
         @media (max-width: 768px) {
             body { padding: 5px; }
             /* Mobile adjustment for status if docked */
-            
-            /* Reduced Floater Size for Mobile */
-            .status-floater {
-                padding: 5px 8px; /* Tighter padding */
-                right: 50px;      /* Pull closer to button */
-            }
             .status-floater.mobile-dock { 
-                padding: 5px 8px; /* Consistent tight padding when docked */
+                /* Override not needed for X-axis since 'right' is fixed, 
+                   but we keep padding/styling consistent */
+                padding: 6px 12px; 
             }
-            .status-floater > div:first-child {
-                font-size: 0.75em !important; /* Smaller main text */
-                margin-bottom: 2px !important;
+            
+            /* ---- FIXED: COMPACT STATUS WINDOW FOR MOBILE ---- */
+            #status-floater {
+                position: fixed !important; /* Force sticky/fixed behavior */
+                top: 10px !important;
+                right: 10px !important; /* Keep it anchored right */
+                left: auto !important;  /* Ensure no JS interference */
+                transform: none !important;
+                transition: none !important; /* Remove lag/jitter */
+                
+                /* Compact Size */
+                padding: 5px 10px !important;
+                font-size: 0.8em !important; 
+                width: auto !important;
+                z-index: 1001 !important;
             }
-            .status-floater .refresh-btn {
+            /* Hide the placeholder since we are breaking the flow link */
+            #status-placeholder { display: none !important; }
+            
+            /* Compact Refresh Button */
+            .refresh-btn {
                 font-size: 0.7em !important;
-                padding: 1px 4px !important;
+                padding: 1px 6px !important;
             }
-            #refresh-timer {
-                font-size: 0.65em !important;
-            }
+            /* ------------------------------------------------ */
             
             header { padding: 15px; flex-direction: column; align-items: flex-start; }
             header > div:first-child { width: 100%; }
-            #status-placeholder { width: 100%; height: 50px; margin-top: 10px; }
+            /* #status-placeholder logic moved above */
+            
             .stats-grid { grid-template-columns: 1fr 1fr; gap: 10px; } 
             .stat-card { padding: 12px 10px; }
             .stat-value { font-size: 1.4em; }
@@ -811,6 +822,11 @@
         const floater = document.getElementById('status-floater');
         const placeholder = document.getElementById('status-placeholder');
         if (!floater || !placeholder) return;
+
+        // FIXED: DISABLE JS POSITIONING ON MOBILE TO PREVENT JITTER
+        if (window.innerWidth <= 768) {
+            return; 
+        }
 
         const scrollY = window.scrollY;
         const threshold = 50; 
@@ -1745,7 +1761,7 @@
             }
         }
         
-        data.sort((a,b) => a.dateObj - b.dateObj);
+        data.sort((a, b) => a.dateObj - b.dateObj);
         return data;
     }
 
