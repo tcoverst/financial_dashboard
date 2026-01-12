@@ -2154,14 +2154,35 @@
         
         document.getElementById('stat-networth').innerText = fmtMoney(globalTotals.balance[lastIndex]);
         
+        // --- 1. TOTAL LIFETIME GAIN PERCENTAGE ---
         const totalGain = globalTotals.cumulative[lastIndex];
         const gainEl = document.getElementById('stat-lifetime-gain');
-        gainEl.innerText = (totalGain >= 0 ? '+' : '') + fmtMoney(totalGain);
+        
+        // Net Invested = Current Balance - Total Gain
+        let netInvested = globalTotals.balance[lastIndex] - totalGain;
+        let lifetimePct = 0;
+        if(netInvested !== 0) {
+            lifetimePct = (totalGain / netInvested) * 100;
+        }
+        
+        const lifetimePctText = ` <span style="font-size:0.6em; opacity:0.8">(${lifetimePct >= 0 ? '+' : ''}${lifetimePct.toFixed(1)}%)</span>`;
+        gainEl.innerHTML = (totalGain >= 0 ? '+' : '') + fmtMoney(totalGain) + lifetimePctText;
         gainEl.className = 'stat-value ' + (totalGain >= 0 ? 'text-green' : 'text-red');
 
+        // --- 2. LATEST MONTHLY P&L PERCENTAGE ---
         const monthlyPL = globalTotals.gainLoss[lastIndex];
         const plEl = document.getElementById('stat-monthly-pl');
-        plEl.innerText = (monthlyPL >= 0 ? '+' : '') + fmtMoney(monthlyPL);
+        
+        // Estimated Start Balance = End Balance - Gain
+        // Note: Using simpler "End - Gain" logic consistent with snapshot tables
+        let estMonthlyStart = globalTotals.balance[lastIndex] - monthlyPL;
+        let monthlyPct = 0;
+        if (estMonthlyStart !== 0) {
+            monthlyPct = (monthlyPL / estMonthlyStart) * 100;
+        }
+        
+        const monthlyPctText = ` <span style="font-size:0.6em; opacity:0.8">(${monthlyPct >= 0 ? '+' : ''}${monthlyPct.toFixed(1)}%)</span>`;
+        plEl.innerHTML = (monthlyPL >= 0 ? '+' : '') + fmtMoney(monthlyPL) + monthlyPctText;
         plEl.className = 'stat-value ' + (monthlyPL >= 0 ? 'text-green' : 'text-red');
 
         const lastIncome = globalTotals.income[lastIndex];
@@ -2303,7 +2324,18 @@
         historyBody.innerHTML = '';
         for (let i = sortedMonths.length - 1; i >= 0; i--) {
             const tr = document.createElement('tr');
-            tr.innerHTML = `<td>${sortedMonths[i]}</td><td style="font-weight:bold">${fmtMoney(globalTotals.balance[i])}</td><td class="${globalTotals.gainLoss[i] >= 0 ? 'text-green' : 'text-red'}">${globalTotals.gainLoss[i] >= 0 ? '+' : ''}${fmtMoney(globalTotals.gainLoss[i])}</td>`;
+            
+            // --- 3. HISTORY TABLE PERCENTAGE ---
+            const histVal = globalTotals.gainLoss[i];
+            const histBal = globalTotals.balance[i];
+            let histEstStart = histBal - histVal;
+            let histPct = 0;
+            if(histEstStart !== 0) {
+                histPct = (histVal / histEstStart) * 100;
+            }
+            const histPctText = ` <span style="font-size:0.8em; opacity:0.7">(${histPct >= 0 ? '+' : ''}${histPct.toFixed(1)}%)</span>`;
+            
+            tr.innerHTML = `<td>${sortedMonths[i]}</td><td style="font-weight:bold">${fmtMoney(histBal)}</td><td class="${histVal >= 0 ? 'text-green' : 'text-red'}">${histVal >= 0 ? '+' : ''}${fmtMoney(histVal)}${histPctText}</td>`;
             accounts.forEach(acc => {
                 const val = alignedData[acc.id][i].balance;
                 const td = document.createElement('td');
