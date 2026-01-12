@@ -158,11 +158,33 @@
             backdrop-filter: blur(5px);
             text-align: right;
             will-change: top, left; 
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
         }
 
         /* UTILITY: DISABLE TRANSITION FOR IMMEDIATE UPDATES */
         .status-floater.no-transition {
             transition: none !important;
+        }
+
+        .refresh-btn {
+            background: transparent;
+            border: 1px solid var(--border-color);
+            color: var(--text);
+            cursor: pointer;
+            padding: 2px 8px;
+            font-size: 0.8em;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .refresh-btn:hover {
+            background: var(--primary);
+            color: var(--bg);
         }
 
         /* THEME TOGGLE BUTTON */
@@ -342,6 +364,13 @@
             margin-right: 5px;
             animation: pulse 1.5s infinite;
         }
+        
+        /* LAYOUT HELPER FOR BREAKDOWN */
+        .breakdown-grid {
+            display: grid; 
+            grid-template-columns: 1fr 1fr; 
+            gap: 20px;
+        }
 
         /* RESPONSIVE */
         @media (max-width: 900px) { 
@@ -377,6 +406,9 @@
             th, td { padding: 8px 4px; font-size: 0.75em; }
             .table-responsive { display: block; width: 100%; overflow-x: auto; }
             select#extrapolationRateSelect { max-width: 100%; font-size: 0.8em; }
+            
+            /* STACK BREAKDOWN ON MOBILE */
+            .breakdown-grid { grid-template-columns: 1fr; }
         }
     </style>
 </head>
@@ -389,10 +421,15 @@
 </div>
 
 <div id="status-floater" class="status-floater" style="top: -100px;">
-    <div style="font-size: 0.9em; font-weight: bold; color: var(--danger);" id="latest-date-display">
+    <div style="font-size: 0.9em; font-weight: bold; color: var(--danger); margin-bottom: 5px;" id="latest-date-display">
         <span class="live-dot"></span>Connecting...
     </div>
-    <div id="refresh-timer" style="font-size: 0.75em; color: #999; margin-top: 4px;">Updates in 60s</div>
+    <div style="display: flex; align-items: center; justify-content: flex-end; gap: 10px; width: 100%;">
+        <button class="refresh-btn" onclick="manualRefresh()" id="manual-refresh-btn" style="margin:0;">
+            <span>↻</span> Update
+        </button>
+        <div id="refresh-timer" style="font-size: 0.75em; color: #999;">Updates in 60s</div>
+    </div>
 </div>
 
 <div class="container">
@@ -441,7 +478,7 @@
 
     <div class="charts-row">
         <div class="card">
-            <h3 id="currentSnapshotTitle">Current Breakdown</h3>
+            <h3 id="currentSnapshotHeader">Current Investment Breakdown (Latest Month)</h3>
             <div class="table-responsive">
                 <table id="snapshotTable" class="table-compact">
                     <thead>
@@ -458,7 +495,7 @@
                 </table>
             </div>
             
-            <h3 id="prevSnapshotTitle" style="margin-top: 30px; border-top: 2px solid var(--border-color); padding-top: 20px;">Previous Breakdown</h3>
+            <h3 id="prevSnapshotHeader" style="margin-top: 30px; border-top: 2px solid var(--border-color); padding-top: 20px;">Previous Month Breakdown</h3>
             <div class="table-responsive">
                 <table id="prevSnapshotTable" class="table-compact">
                     <thead>
@@ -668,16 +705,44 @@
         <h3 style="margin-bottom:15px; border-bottom:1px solid var(--border-color); padding-bottom:10px;">Detailed Projection Breakdown</h3>
         
         <div style="background:var(--bg); padding:15px; border-radius:6px; margin-bottom:20px; font-size:0.9em; line-height:1.6; color:var(--text); border:1px solid var(--border-color);">
-            <strong>The Math Behind the Numbers:</strong><br>
-            Future values are calculated monthly using the formula: 
-            <code style="background:var(--card-bg); padding:2px 4px; border-radius:3px; color:var(--danger); font-family:monospace; word-break: break-word;">Balance(t) = Balance(t-1) × (1 + AnnualRate/12) + MonthlyInflow(t)</code>.<br>
-            <strong>Contribution Assumptions:</strong>
-            Contributions are calculated <strong>bi-weekly (every 14 days)</strong> based on the selected Payday Anchor. Most months have 2 contributions, while some have 3. 
-            <br>
-            Raises are applied to the base paycheck amount: 
-            <strong><span id="jan-raise-display">6.0%</span> every January</strong> and 
-            <strong><span id="july-raise-display">3.0%</span> every July</strong> 
-            (Auto-calculated from your most recent salary history).
+            <div class="breakdown-grid">
+                <div>
+                    <strong style="color:var(--primary); text-transform:uppercase;">1. The Math Behind the Numbers</strong><br>
+                    Future values are calculated using monthly compounding:<br>
+                    <code style="background:var(--card-bg); padding:2px 4px; border-radius:3px; color:var(--danger); font-family:monospace; display:block; margin:5px 0;">
+                        Balance(t) = Balance(t-1) × (1 + Rate/12) + Contrib(t)
+                    </code>
+                    <ul>
+                        <li><strong>Balance(t-1):</strong> Previous month's ending balance.</li>
+                        <li><strong>Rate:</strong> Annual return selected above (e.g., 0.10 for 10%).</li>
+                        <li><strong>Contrib(t):</strong> Total cash added that month.</li>
+                    </ul>
+                </div>
+                <div>
+                    <strong style="color:var(--primary); text-transform:uppercase;">2. Contribution Assumptions</strong><br>
+                    <ul>
+                        <li><strong>Baseline Per Paycheck:</strong> <span id="per-paycheck-amt" style="font-weight:bold; color:var(--success)">-</span> (Adjusted for Jan Raise)</li>
+                        <li><strong>Payday Anchor:</strong> The date selected (e.g., Jan 10, 2026) determines exactly which months have 3 paychecks vs. 2. The model adjusts monthly contributions accordingly.</li>
+                    </ul>
+                </div>
+                <div>
+                    <strong style="color:var(--primary); text-transform:uppercase;">3. "Save The Raise" Strategy</strong><br>
+                    We assume zero lifestyle inflation. 100% of every future raise is added directly to your investment contribution.<br>
+                    <ul>
+                        <li><strong>Raises Applied:</strong> <span id="jan-raise-display">6.0%</span> in January, <span id="july-raise-display">3.0%</span> in July.</li>
+                        <li><strong>Calculation:</strong> <code>RaiseAmount = CurrentBaseSalary × Raise%</code>.</li>
+                        <li><strong>Result:</strong> This specific dollar amount is added to every future paycheck contribution permanently.</li>
+                    </ul>
+                </div>
+                <div>
+                    <strong style="color:var(--primary); text-transform:uppercase;">4. Asset Purchases & Net Worth</strong><br>
+                    When goals are hit (Porsche/Beach House), cash is "spent":
+                    <ul>
+                        <li><strong>Liquid NW:</strong> Drops by the cost of the asset ($300k or $5M).</li>
+                        <li><strong>Total NW:</strong> Remains consistent, as the cash is converted into a fixed asset value included in the total.</li>
+                    </ul>
+                </div>
+            </div>
         </div>
     
         <div class="table-responsive" style="max-height: 500px;">
@@ -785,6 +850,8 @@
     // RAISE CALCULATION GLOBALS
     let globalJanRaise = 0.06;
     let globalJulyRaise = 0.03;
+    let globalLatestBaseSalary = 130000; // Default fallback, updated by salary data
+    let globalPrevBaseSalary = 110300; // Track previous for delta calculation
 
     function toggleTheme() {
         isSciFiMode = !isSciFiMode;
@@ -914,6 +981,7 @@
 
     let refreshInterval = null;
     let refreshTimer = 60;
+    let isUpdating = false;
 
     // ==========================================
     // UTILITIES
@@ -1033,16 +1101,21 @@
     }
 
     async function updateWithLiveMarketData(accounts, isSilent = false) {
+        if (isUpdating) return;
+        isUpdating = true;
+        
         const statusDiv = document.getElementById('loading');
         const headerStatus = document.getElementById('latest-date-display');
+        const btn = document.getElementById('manual-refresh-btn');
         
         if (!isSilent) {
             statusDiv.style.opacity = '1';
             statusDiv.style.display = 'flex';
             statusDiv.innerHTML = "Fetching Real-Time Market Data...<br><span style='font-size:0.8em; font-weight:normal'>Trying multiple sources...</span>";
         } else {
-            headerStatus.innerHTML = "<span class='live-dot'></span> Updating Market Data...";
+            headerStatus.innerHTML = "<span class='live-dot'></span> Updating...";
             headerStatus.style.color = "#e67e22";
+            if(btn) btn.innerHTML = "<span>↻</span> ...";
         }
         
         const now = new Date();
@@ -1050,69 +1123,85 @@
         const currentMonthVal = now.getMonth() + 1; 
         const currentMonthKey = `${currentYear}-${String(currentMonthVal).padStart(2, '0')}`;
         
-        await Promise.all(accounts.map(async (acc) => {
-            if (acc.data.length === 0) return;
+        try {
+            await Promise.all(accounts.map(async (acc) => {
+                if (acc.data.length === 0) return;
 
-            const startOfThisMonth = new Date(currentYear, currentMonthVal - 1, 1);
-            let baselineEntry = null;
-            for (let i = acc.data.length - 1; i >= 0; i--) {
-                if (acc.data[i].dateObj < startOfThisMonth) {
-                    baselineEntry = acc.data[i];
-                    break;
+                const startOfThisMonth = new Date(currentYear, currentMonthVal - 1, 1);
+                let baselineEntry = null;
+                for (let i = acc.data.length - 1; i >= 0; i--) {
+                    if (acc.data[i].dateObj < startOfThisMonth) {
+                        baselineEntry = acc.data[i];
+                        break;
+                    }
                 }
-            }
 
-            if (!baselineEntry) return;
+                if (!baselineEntry) return;
 
-            let liveEntry = acc.data.find(d => d.key === currentMonthKey);
-            let isNewRow = false;
+                let liveEntry = acc.data.find(d => d.key === currentMonthKey);
+                let isNewRow = false;
 
-            if (!liveEntry) {
-                isNewRow = true;
-                liveEntry = {
-                    key: currentMonthKey,
-                    dateObj: startOfThisMonth,
-                    deposits: 0,
-                    income: 0,
-                    marketGain: 0,
-                    cumulative: baselineEntry.cumulative,
-                    balance: baselineEntry.balance,
-                    invested: baselineEntry.invested,
-                    rawWithdrawals: 0, 
-                    isLive: true,
-                    isError: false,
-                    timestamp: 0 // Initialize timestamp
-                };
-            } else {
-                liveEntry.isLive = true;
-                liveEntry.isError = false;
-            }
+                if (!liveEntry) {
+                    isNewRow = true;
+                    liveEntry = {
+                        key: currentMonthKey,
+                        dateObj: startOfThisMonth,
+                        deposits: 0,
+                        income: 0,
+                        marketGain: 0,
+                        cumulative: baselineEntry.cumulative,
+                        balance: baselineEntry.balance,
+                        invested: baselineEntry.invested,
+                        rawWithdrawals: 0, 
+                        isLive: true,
+                        isError: false,
+                        timestamp: 0 // Initialize timestamp
+                    };
+                } else {
+                    liveEntry.isLive = true;
+                    liveEntry.isError = false;
+                }
 
-            let ticker = liveEntry.invested; 
-            if (acc.id.includes('fidelity')) ticker = 'GOOGL';
-            if (acc.id.includes('boeing')) ticker = 'Boeing (Bonds)';
-            if (acc.id.includes('wells')) ticker = 'Wells Fargo (Cash)';
+                let ticker = liveEntry.invested; 
+                if (acc.id.includes('fidelity')) ticker = 'GOOGL';
+                if (acc.id.includes('boeing')) ticker = 'Boeing (Bonds)';
+                if (acc.id.includes('wells')) ticker = 'Wells Fargo (Cash)';
 
-            const marketData = await getMonthToDatePerformance(ticker);
-            
-            if (marketData === null) {
-                liveEntry.isError = true;
+                const marketData = await getMonthToDatePerformance(ticker);
+                
+                if (marketData === null) {
+                    liveEntry.isError = true;
+                    if (isNewRow) {
+                        liveEntry.marketGain = 0;
+                        liveEntry.balance = baselineEntry.balance + liveEntry.deposits + liveEntry.income;
+                    }
+                } else {
+                    const growthAmount = baselineEntry.balance * marketData.rate;
+                    liveEntry.marketGain = growthAmount; 
+                    liveEntry.balance = baselineEntry.balance + growthAmount + liveEntry.deposits + liveEntry.income;
+                    liveEntry.cumulative = baselineEntry.cumulative + growthAmount + liveEntry.income;
+                    liveEntry.timestamp = marketData.ts; // Store timestamp
+                }
+
                 if (isNewRow) {
-                    liveEntry.marketGain = 0;
-                    liveEntry.balance = baselineEntry.balance + liveEntry.deposits + liveEntry.income;
+                    acc.data.push(liveEntry);
                 }
-            } else {
-                const growthAmount = baselineEntry.balance * marketData.rate;
-                liveEntry.marketGain = growthAmount; 
-                liveEntry.balance = baselineEntry.balance + growthAmount + liveEntry.deposits + liveEntry.income;
-                liveEntry.cumulative = baselineEntry.cumulative + growthAmount + liveEntry.income;
-                liveEntry.timestamp = marketData.ts; // Store timestamp
-            }
-
-            if (isNewRow) {
-                acc.data.push(liveEntry);
-            }
-        }));
+            }));
+        } catch (e) {
+            console.error(e);
+        } finally {
+            isUpdating = false;
+            if(btn) btn.innerHTML = "<span>↻</span> Update";
+        }
+    }
+    
+    async function manualRefresh() {
+        if(isUpdating) return;
+        await updateWithLiveMarketData(globalAccountsData, true);
+        processAndRender(globalAccountsData, true);
+        // Reset timer
+        const isMarket = isMarketOpen();
+        refreshTimer = isMarket ? 10 : 60;
     }
 
     // ==========================================
@@ -1179,13 +1268,18 @@
         // Update Chart Subtitle
         const chartSub = document.getElementById('chart-subtitle-text');
         if(chartSub) {
-            chartSub.innerHTML = `Baseline: Current Net Worth + Bi-Weekly Contributions (Raises: <strong>${janPctText}</strong> Jan, <strong>${julyPctText}</strong> July)`;
+            chartSub.innerHTML = `Baseline: Current Net Worth + Bi-Weekly Contributions (Full Dollar Raises Applied: <strong>${janPctText}</strong> Jan, <strong>${julyPctText}</strong> July)`;
         }
 
         // --- END AUTO-CALCULATION ---
 
         if (data.length === 0) return;
         const latest = data[data.length - 1];
+        const previous = data.length > 1 ? data[data.length - 2] : latest;
+        
+        // UPDATE GLOBAL BASE SALARY FOR PROJECTIONS
+        globalLatestBaseSalary = latest.salary;
+        globalPrevBaseSalary = previous.salary;
         
         document.getElementById('stat-salary-base').innerText = fmtMoney(latest.salary);
         document.getElementById('stat-salary-date').innerText = "Effective: " + latest.date;
@@ -1364,33 +1458,42 @@
         const anchorParts = anchorInput.value.split('-'); // Parse YYYY-MM-DD
         
         // --- SMART BASE PAYCHECK CALCULATION ---
-        // 1. Determine "Previous Month" relative to the Current Data Point
-        // If data is up to May 2025 (currentDate), inflow comes from April 2025.
-        // We need to know how many paydays were in April 2025 to normalize the inflow.
         let baselineMonthDate = new Date(currentDate);
+        // Force calculation on the LAST COMPLETE MONTH (Dec) to get stable baseline
+        // If data is Jan 2026, currentDate is Jan 1. previous is Dec.
         baselineMonthDate.setMonth(baselineMonthDate.getMonth() - 1); 
         
-        // 2. Count Paydays in that specific baseline month
         let blStart = new Date(baselineMonthDate.getFullYear(), baselineMonthDate.getMonth(), 1);
         let blEnd = new Date(baselineMonthDate.getFullYear(), baselineMonthDate.getMonth() + 1, 0);
         let blTracker = new Date(parseInt(anchorParts[0]), parseInt(anchorParts[1])-1, parseInt(anchorParts[2]));
         
-        // Align tracker to before range
         while(blTracker > blStart) { blTracker.setDate(blTracker.getDate() - 14); }
-        // Walk forward
         let paychecksInBaseline = 0;
         while(blTracker < blStart) { blTracker.setDate(blTracker.getDate() + 14); }
-        // Now blTracker is >= blStart. Count within range.
         while(blTracker <= blEnd) {
             paychecksInBaseline++;
             blTracker.setDate(blTracker.getDate() + 14);
         }
         
-        // 3. Fallback if 0 (shouldn't happen with valid logic, but safety first)
-        if(paychecksInBaseline < 2) paychecksInBaseline = 2; 
+        if(paychecksInBaseline < 1) paychecksInBaseline = 2; // Fallback
         
-        // 4. Derive Base Paycheck Amount
+        // Use the Invested Inflow (passed in) divided by paychecks count
         let paycheckAmount = startInflow / paychecksInBaseline;
+        
+        // --- FORCE RAISE APPLICATION ---
+        // The baseline is derived from Dec 2025 (pre-raise).
+        // The Projection starts Jan 2026 (post-raise).
+        // We calculate the Dollar Delta of the raise explicitly.
+        let raiseDelta = (globalLatestBaseSalary - globalPrevBaseSalary) / 26;
+        if(raiseDelta < 0) raiseDelta = 0; // Safety
+        
+        // Apply the raise to the starting paycheck amount for the projection
+        let displayPaycheckAmount = paycheckAmount + raiseDelta;
+        
+        // UPDATE UI WITH ADJUSTED PAYCHECK AMOUNT
+        const ppEl = document.getElementById('per-paycheck-amt');
+        if(ppEl) ppEl.innerText = fmtMoney(displayPaycheckAmount);
+
         // ----------------------------------------
 
         const labels = [];
@@ -1431,8 +1534,12 @@
 
         rates.forEach((rate, idx) => {
             let balance = startBalance;
-            let currentPaycheck = paycheckAmount; 
+            // Initialize with the POST-RAISE amount
+            let currentPaycheck = displayPaycheckAmount; 
             
+            // "Save the Raise" tracking - Start from current high salary
+            let modeledSalaryCheck = globalLatestBaseSalary / 26; 
+
             // Independent Tracker for Paydays for this Rate simulation
             let payTracker = new Date(parseInt(anchorParts[0]), parseInt(anchorParts[1])-1, parseInt(anchorParts[2]));
 
@@ -1457,10 +1564,20 @@
                     currentYearStats = { year: year, startBal: balance, annualContrib: 0, annualGrowth: 0 };
                 }
 
-                if (i > 0) { 
-                    // Apply raises to base paycheck amount using Auto-Calculated Globals
-                    if (date.getMonth() === 0) currentPaycheck *= (1 + globalJanRaise);
-                    if (date.getMonth() === 6) currentPaycheck *= (1 + globalJulyRaise);
+                // Future Raises (Beyond the initial Jan one which is baked in)
+                // We skip the first Jan check (i=0) because we manually added that raise to 'currentPaycheck' above
+                if (i > 0) {
+                    let raiseAmt = 0;
+                    if (date.getMonth() === 0) {
+                        raiseAmt = modeledSalaryCheck * globalJanRaise;
+                        modeledSalaryCheck += raiseAmt;
+                        currentPaycheck += raiseAmt;
+                    }
+                    if (date.getMonth() === 6) {
+                        raiseAmt = modeledSalaryCheck * globalJulyRaise;
+                        modeledSalaryCheck += raiseAmt;
+                        currentPaycheck += raiseAmt;
+                    }
                 }
 
                 // Determine Paychecks in this specific month
@@ -1618,7 +1735,7 @@
             document.getElementById('loading').style.opacity = '0';
             setTimeout(() => { document.getElementById('loading').style.display = 'none'; }, 300);
 
-            // 4. START AUTO-REFRESH (Every 60 Seconds)
+            // 4. START AUTO-REFRESH
             startAutoRefresh();
 
         } catch (error) {
@@ -1626,42 +1743,90 @@
             document.getElementById('loading').innerHTML = "Error loading data.<br>" + error.message;
         }
     }
-
-    function startAutoRefresh() {
-        // Update timer text every second
-        setInterval(() => {
-            refreshTimer--;
-            if (refreshTimer <= 0) refreshTimer = 60;
-            document.getElementById('refresh-timer').innerText = `Updates in ${refreshTimer}s`;
-        }, 1000);
-
-        // Actual Refresh Loop (60s)
-        setInterval(async () => {
-            console.log("Refreshing Market Data...");
-            await updateWithLiveMarketData(globalAccountsData, true); // Silent = true
-            processAndRender(globalAccountsData, true); // Silent render
-            refreshTimer = 60;
-        }, 60000);
+    
+    function isMarketOpen() {
+        const now = new Date();
+        const day = now.getDay();
+        
+        // 0 = Sun, 6 = Sat
+        if (day === 0 || day === 6) return false;
+        
+        // Convert to ET to check 9:30 AM - 4:00 PM
+        const etTime = now.toLocaleString("en-US", {timeZone: "America/New_York"});
+        const etDate = new Date(etTime);
+        const h = etDate.getHours();
+        const m = etDate.getMinutes();
+        
+        const minutesOfDay = h * 60 + m;
+        const start = 9 * 60 + 30; // 9:30 AM
+        const end = 16 * 60;       // 4:00 PM
+        
+        return minutesOfDay >= start && minutesOfDay < end;
     }
 
-    function createSnapshotTable(accounts, alignedData, index, tableId) {
+    function startAutoRefresh() {
+        // Initial setup
+        let isMarket = isMarketOpen();
+        refreshTimer = isMarket ? 10 : 60;
+
+        // Ticking every second to handle the UI countdown and logic switching
+        setInterval(() => {
+            refreshTimer--;
+            
+            // Check if market status changed
+            const currentMarketStatus = isMarketOpen();
+            if (currentMarketStatus !== isMarket) {
+                isMarket = currentMarketStatus;
+                // Don't reset timer immediately to avoid jumps, but next reset will use new time
+            }
+            
+            if (refreshTimer <= 0) {
+                // Trigger Refresh
+                console.log("Auto-Refreshing Market Data...");
+                updateWithLiveMarketData(globalAccountsData, true); // Silent = true
+                processAndRender(globalAccountsData, true); // Silent render
+                
+                // Reset timer based on current market status
+                refreshTimer = isMarket ? 10 : 60;
+            }
+            
+            document.getElementById('refresh-timer').innerText = `Updates in ${refreshTimer}s`;
+        }, 1000);
+    }
+
+    function createSnapshotTable(accounts, alignedData, index, tableId, headerId, monthKey) {
         const body = document.getElementById(tableId);
         body.innerHTML = '';
         
+        if (headerId && monthKey) {
+            const parts = monthKey.split('-');
+            const d = new Date(parseInt(parts[0]), parseInt(parts[1])-1, 1);
+            const prettyDate = d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+            document.getElementById(headerId).innerText = `${prettyDate} Breakdown`;
+        }
+
         if (index < 0) {
             body.innerHTML = '<tr><td colspan="7" style="text-align:center">No Data Available for this period</td></tr>';
             return;
         }
-
-        let sumBalance = 0;
+        
+        let sumBal = 0;
         let sumGain = 0;
         let sumInflow = 0;
         let sumNetDep = 0;
-        let sumCumulative = 0;
+        let sumCum = 0;
 
         accounts.forEach(acc => {
             const entry = alignedData[acc.id][index];
             if (entry.balance < 0.01) return;
+            
+            // Accumulate totals
+            sumBal += entry.balance;
+            sumGain += (entry.marketGain + entry.income);
+            sumInflow += (entry.deposits + entry.income);
+            const totalNetDep = entry.balance - entry.cumulative;
+            sumNetDep += totalNetDep;
+            sumCum += entry.cumulative;
 
             const tr = document.createElement('tr');
             if(entry.isLive) {
@@ -1669,7 +1834,6 @@
                 tr.style.backgroundColor = isSciFiMode ? 'rgba(255, 255, 0, 0.05)' : "#fef9e7"; 
             }
 
-            const totalNetDep = entry.balance - entry.cumulative;
             let roiPct = 0;
             if (totalNetDep !== 0) { roiPct = (entry.cumulative / totalNetDep) * 100; }
             const roiColor = roiPct >= 0 ? 'text-green' : 'text-red';
@@ -1688,9 +1852,17 @@
                  const gainClass = entry.marketGain >= 0 ? 'text-green' : 'text-red';
                  const gainText = (entry.marketGain >= 0 ? '+' : '') + fmtMoney(entry.marketGain + entry.income);
                  
+                 // Calculate 1-Mo Percentage for display
+                 // Logic: Gain / (EndBalance - Gain) [Approximate starting balance for that month's gain]
+                 let oneMoPct = 0;
+                 const estimatedStartBal = entry.balance - (entry.marketGain + entry.income); 
+                 if(estimatedStartBal > 0) {
+                     oneMoPct = ((entry.marketGain + entry.income) / estimatedStartBal) * 100;
+                 }
+                 const pctText = ` <span style="font-size:0.8em; opacity:0.8">(${oneMoPct >= 0 ? '+' : ''}${oneMoPct.toFixed(1)}%)</span>`;
+                 
                  // Mutual Fund Logic
                  if(entry.isLive && (entry.invested.includes('VIGIX') || entry.invested.includes('VTSAX'))) {
-                     // Determine freshness
                      const dataDate = new Date(entry.timestamp * 1000);
                      const today = new Date();
                      const isSameDay = dataDate.getDate() === today.getDate() && dataDate.getMonth() === today.getMonth();
@@ -1701,15 +1873,8 @@
                      dailyBadge = `<br><span class="daily-tag"><span class="status-dot ${dotClass}" title="${tooltip}"></span>Daily</span>`;
                  }
                  
-                 marketGainDisplay = `<span class="${gainClass}">${gainText}</span>`;
+                 marketGainDisplay = `<span class="${gainClass}">${gainText}${pctText}</span>`;
             }
-
-            // ACCUMULATE TOTALS
-            sumBalance += entry.balance;
-            sumGain += (entry.marketGain + entry.income);
-            sumInflow += (entry.deposits + entry.income);
-            sumNetDep += totalNetDep;
-            sumCumulative += entry.cumulative;
 
             tr.innerHTML = `
                 <td>
@@ -1731,26 +1896,22 @@
             `;
             body.appendChild(tr);
         });
-
-        // --- ADD TOTAL ROW ---
-        const totalRoi = sumNetDep !== 0 ? (sumCumulative / sumNetDep) * 100 : 0;
-        const totalTr = document.createElement('tr');
-        totalTr.style.borderTop = "2px solid var(--text)";
-        totalTr.style.fontWeight = "bold";
-        totalTr.style.backgroundColor = "var(--th-bg)"; // Subtle highlight
         
-        const totalGainClass = sumGain >= 0 ? 'text-green' : 'text-red';
-        const totalCumClass = sumCumulative >= 0 ? 'text-green' : 'text-red';
-        const totalRoiClass = totalRoi >= 0 ? 'text-green' : 'text-red';
-
+        // TOTAL ROW Logic
+        let totalRoi = 0;
+        if (sumNetDep !== 0) totalRoi = (sumCum / sumNetDep) * 100;
+        
+        const totalTr = document.createElement('tr');
+        totalTr.style.fontWeight = 'bold';
+        totalTr.style.backgroundColor = isSciFiMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)';
         totalTr.innerHTML = `
             <td>TOTAL</td>
-            <td>${fmtMoney(sumBalance)}</td>
-            <td class="${totalGainClass}">${(sumGain >= 0 ? '+' : '') + fmtMoney(sumGain)}</td>
+            <td>${fmtMoney(sumBal)}</td>
+            <td class="${sumGain >= 0 ? 'text-green' : 'text-red'}">${(sumGain >= 0 ? '+' : '') + fmtMoney(sumGain)}</td>
             <td>${fmtMoney(sumInflow)}</td>
             <td>${fmtMoney(sumNetDep)}</td>
-            <td class="${totalCumClass}">${fmtMoney(sumCumulative)}</td>
-            <td class="${totalRoiClass}">${(totalRoi >= 0 ? '+' : '') + totalRoi.toFixed(1)}%</td>
+            <td class="${sumCum >= 0 ? 'text-green' : 'text-red'}">${fmtMoney(sumCum)}</td>
+            <td class="${totalRoi >= 0 ? 'text-green' : 'text-red'}">${(totalRoi >= 0 ? '+' : '') + totalRoi.toFixed(1)}%</td>
         `;
         body.appendChild(totalTr);
     }
@@ -1955,10 +2116,27 @@
         document.getElementById('stat-monthly-inflow').innerText = fmtMoney(totalInflow);
         document.getElementById('stat-monthly-inflow-sub').innerHTML = `Income: ${fmtMoney(lastIncome)} <span style="margin:0 4px; color:#ccc">|</span> Net Dep: ${fmtMoney(lastDeposits)}`;
 
-        let projectionInflow = totalInflow; 
-        if (lastIndex > 0) projectionInflow = globalTotals.income[lastIndex - 1] + globalTotals.deposits[lastIndex - 1];
+        // ==========================================
+        // PROJECTION INFLOW ADJUSTMENT
+        // ==========================================
+        // Calculate inflow specifically for INVESTMENTS (Vanguard A + B), ignoring Cash (Wells) and UTMA
+        // We use the LAST COMPLETE MONTH (lastIndex - 1, usually December) as the stable baseline.
+        let investmentInflow = 0;
+        if (lastIndex > 0) {
+            const baselineMonth = sortedMonths[lastIndex - 1]; // December
+            accounts.forEach(acc => {
+                if (acc.id === 'vanguardA' || acc.id === 'vanguardB' || acc.id === 'fidelity') {
+                    const entry = alignedData[acc.id].find(d => d.key === baselineMonth);
+                    if (entry) {
+                        investmentInflow += entry.deposits + entry.income;
+                    }
+                }
+            });
+        } else {
+            investmentInflow = totalInflow; // Fallback
+        }
         
-        renderProjectionChart(globalTotals.balance[lastIndex], projectionInflow, sortedMonths[lastIndex], isSilent);
+        renderProjectionChart(globalTotals.balance[lastIndex], investmentInflow, sortedMonths[lastIndex], isSilent);
 
         const stackedDatasets = accounts.map((acc, index) => {
             const color = palette[index % palette.length];
@@ -1969,22 +2147,10 @@
             };
         });
         
-        // --- DYNAMIC TITLES LOGIC ---
-        function getMonthName(key) {
-             const parts = key.split('-');
-             const d = new Date(parts[0], parts[1]-1, 1);
-             return d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-        }
-
-        const currentTitle = getMonthName(sortedMonths[lastIndex]) + " Breakdown";
-        const prevTitle = getMonthName(sortedMonths[lastIndex - 1]) + " Breakdown";
-        
-        document.getElementById('currentSnapshotTitle').innerText = currentTitle;
-        document.getElementById('prevSnapshotTitle').innerText = prevTitle;
-        
         // RENDER TABLES (Live and Previous)
-        createSnapshotTable(accounts, alignedData, lastIndex, 'snapshotBody');
-        createSnapshotTable(accounts, alignedData, lastIndex - 1, 'prevSnapshotBody');
+        // Pass the Month Key strings to update the titles
+        createSnapshotTable(accounts, alignedData, lastIndex, 'snapshotBody', 'currentSnapshotHeader', sortedMonths[lastIndex]);
+        createSnapshotTable(accounts, alignedData, lastIndex - 1, 'prevSnapshotBody', 'prevSnapshotHeader', sortedMonths[lastIndex-1]);
         
         // RENDER WF WIDGET
         renderWellsFargoWidget(accounts, isSilent);
