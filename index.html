@@ -147,25 +147,28 @@
 
         /* FLOATING STATUS BOX */
         .status-floater {
-            position: fixed;
-            /* Remove manual Left positioning, anchor to Right */
-            right: 60px; /* 15px (toggle margin) + 32px (toggle width) + 13px (gap) */
+            /* Desktop Default: Fixed Position logic remains the same for desktop if needed, 
+               but we will switch to absolute/fixed toggling for smoother mobile perf */
+            position: absolute; 
+            right: 60px; /* Aligned left of theme toggle (15px + 32px + 13px gap) */
             background: var(--card-bg);
             padding: 10px 15px;
-            border-radius: 0px; /* Sharp corners here too */
+            border-radius: 0px; 
             border: 1px solid var(--border-color);
             z-index: 998;
             backdrop-filter: blur(5px);
             text-align: right;
-            will-change: top, left; 
             display: flex;
             flex-direction: column;
             align-items: flex-end;
+            /* No transition on top/left to prevent fighting with scroll */
         }
-
-        /* UTILITY: DISABLE TRANSITION FOR IMMEDIATE UPDATES */
-        .status-floater.no-transition {
-            transition: none !important;
+        
+        /* DOCKED STATE (Fixed to Top) */
+        .status-floater.docked {
+            position: fixed;
+            top: 15px !important; /* Aligns with Theme Toggle top */
+            right: 60px;
         }
 
         .refresh-btn {
@@ -222,6 +225,8 @@
         }
 
         header > div:first-child { width: auto; }
+        
+        /* Placeholder determines the "Static" start position */
         #status-placeholder { width: 260px; height: 50px; pointer-events: none; flex-shrink: 0; }
         
         .subtitle { color: #7f8c8d; font-size: 0.9em; margin-top: 5px; letter-spacing: 0.5px; }
@@ -379,42 +384,30 @@
 
         @media (max-width: 768px) {
             body { padding: 5px; }
-            /* Mobile adjustment for status if docked */
-            .status-floater.mobile-dock { 
-                /* Override not needed for X-axis since 'right' is fixed, 
-                   but we keep padding/styling consistent */
-                padding: 6px 12px; 
-            }
             
-            /* ---- FIXED: COMPACT STATUS WINDOW FOR MOBILE ---- */
-            #status-floater {
-                position: fixed !important; /* Force sticky/fixed behavior */
-                top: 10px !important;
-                right: 10px !important; /* Keep it anchored right */
-                left: auto !important;  /* Ensure no JS interference */
-                transform: none !important;
-                transition: none !important; /* Remove lag/jitter */
-                
-                /* Compact Size */
-                padding: 5px 10px !important;
-                font-size: 0.8em !important; 
-                width: auto !important;
-                z-index: 1001 !important;
+            /* MOBILE STATUS FLOATER OPTIMIZATION */
+            .status-floater {
+                /* Reduce size significantly */
+                padding: 4px 8px;
+                right: 55px; /* Adjust slightly for cleaner gap */
+                max-width: 140px; /* Prevent it from getting too wide */
             }
-            /* Hide the placeholder since we are breaking the flow link */
-            #status-placeholder { display: none !important; }
-            
-            /* Compact Refresh Button */
-            .refresh-btn {
-                font-size: 0.7em !important;
-                padding: 1px 6px !important;
+            .status-floater #latest-date-display {
+                font-size: 0.65em !important; /* Smaller text */
+                margin-bottom: 2px !important;
+                white-space: nowrap;
             }
-            /* ------------------------------------------------ */
-            
+            .status-floater .refresh-btn {
+                font-size: 0.65em !important;
+                padding: 1px 5px !important;
+            }
+            .status-floater #refresh-timer {
+                font-size: 0.6em !important;
+            }
+
             header { padding: 15px; flex-direction: column; align-items: flex-start; }
             header > div:first-child { width: 100%; }
-            /* #status-placeholder logic moved above */
-            
+            #status-placeholder { width: 100%; height: 50px; margin-top: 10px; }
             .stats-grid { grid-template-columns: 1fr 1fr; gap: 10px; } 
             .stat-card { padding: 12px 10px; }
             .stat-value { font-size: 1.4em; }
@@ -446,7 +439,7 @@
     </svg>
 </div>
 
-<div id="status-floater" class="status-floater" style="top: -100px;">
+<div id="status-floater" class="status-floater">
     <div style="font-size: 0.9em; font-weight: bold; color: var(--danger); margin-bottom: 5px;" id="latest-date-display">
         <span class="live-dot"></span>Connecting...
     </div>
@@ -809,6 +802,9 @@
     let isDockedState = false; 
     let scrollRaf = null;
 
+    // We calculate the logical "Start" position once
+    let placeholderTop = 0;
+
     function onScroll() {
         if (!scrollRaf) {
             scrollRaf = requestAnimationFrame(() => {
@@ -823,62 +819,48 @@
         const placeholder = document.getElementById('status-placeholder');
         if (!floater || !placeholder) return;
 
-        // FIXED: DISABLE JS POSITIONING ON MOBILE TO PREVENT JITTER
-        if (window.innerWidth <= 768) {
-            return; 
-        }
+        // Calculate placeholder top relative to document if not set
+        // (Re-calculate on resize or initial load)
+        const rect = placeholder.getBoundingClientRect();
+        const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+        const absoluteTop = rect.top + scrollTop;
 
-        const scrollY = window.scrollY;
-        const threshold = 50; 
-        const isMobile = window.innerWidth <= 768;
+        // The point at which we want to snap to fixed (Theme switch is top:15px)
+        // We want to snap when the window scroll passes the placeholder's original position minus the 15px gap
+        const dockThreshold = absoluteTop - 15; 
 
-        const dockTop = 20; // Fixed 20px top for both modes
-        const shouldDock = scrollY > threshold;
-
-        // X-Axis is handled purely by CSS (right: 60px)
-        // We only animate 'top' here.
-
-        if (shouldDock) {
-            // DOCKED MODE
-            floater.style.top = dockTop + 'px';
-            
+        if (scrollTop >= dockThreshold) {
+            // DOCKED MODE (Fixed)
             if (!isDockedState) {
-                // Animate INTO the docked position
-                // Only animate 'top', 'right' is fixed in CSS
-                floater.style.transition = 'top 0.5s cubic-bezier(0.2, 0.8, 0.2, 1)';
+                floater.classList.add('docked');
+                floater.style.top = ''; // Clear inline style so CSS class takes over
                 isDockedState = true;
-                floater.classList.add('mobile-dock');
             }
         } else {
-            // EMBEDDED MODE
-            const pRect = placeholder.getBoundingClientRect();
-            
-            // We use pRect.top which is relative to viewport, perfect for fixed positioning
-            floater.style.top = pRect.top + 'px';
-            
-            if (isDockedState) {
-                // SWITCHING BACK: Snap instantly to feel "sticky" and rigid
-                floater.style.transition = 'none';
+            // NORMAL MODE (Absolute)
+            if (isDockedState || floater.style.position !== 'absolute') {
+                floater.classList.remove('docked');
+                floater.style.position = 'absolute';
+                floater.style.top = absoluteTop + 'px';
                 isDockedState = false;
-                floater.classList.remove('mobile-dock');
-            } else {
-                // SCROLLING: Keep transition disabled to track perfectly
-                floater.style.transition = 'none';
             }
         }
     }
 
     // Initialization Safety Check
     function initStatusFloater() {
+        // Initial Calculation
         updateStatusPosition();
-        // Recalculate after a short delay to ensure layout/fonts are settled
         setTimeout(updateStatusPosition, 100);
-        setTimeout(updateStatusPosition, 500);
     }
 
     // Bind Events
     window.addEventListener('scroll', onScroll);
-    window.addEventListener('resize', onScroll);
+    window.addEventListener('resize', () => {
+        // Reset state on resize to force recalculation
+        isDockedState = false; 
+        updateStatusPosition(); 
+    });
     window.addEventListener('DOMContentLoaded', initStatusFloater);
     window.onload = initStatusFloater;
 
