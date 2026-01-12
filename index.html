@@ -1901,13 +1901,23 @@
         let totalRoi = 0;
         if (sumNetDep !== 0) totalRoi = (sumCum / sumNetDep) * 100;
         
+        // ADDED: Total 1-Mo Gain %
+        let totalOneMoPct = 0;
+        const totalEstStartBal = sumBal - sumGain;
+        if (totalEstStartBal > 0) {
+            totalOneMoPct = (sumGain / totalEstStartBal) * 100;
+        }
+        const totalPctText = ` <span style="font-size:0.8em; opacity:0.8">(${totalOneMoPct >= 0 ? '+' : ''}${totalOneMoPct.toFixed(1)}%)</span>`;
+        
         const totalTr = document.createElement('tr');
         totalTr.style.fontWeight = 'bold';
         totalTr.style.backgroundColor = isSciFiMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)';
         totalTr.innerHTML = `
             <td>TOTAL</td>
             <td>${fmtMoney(sumBal)}</td>
-            <td class="${sumGain >= 0 ? 'text-green' : 'text-red'}">${(sumGain >= 0 ? '+' : '') + fmtMoney(sumGain)}</td>
+            <td class="${sumGain >= 0 ? 'text-green' : 'text-red'}">
+                ${(sumGain >= 0 ? '+' : '') + fmtMoney(sumGain)}${totalPctText}
+            </td>
             <td>${fmtMoney(sumInflow)}</td>
             <td>${fmtMoney(sumNetDep)}</td>
             <td class="${sumCum >= 0 ? 'text-green' : 'text-red'}">${fmtMoney(sumCum)}</td>
