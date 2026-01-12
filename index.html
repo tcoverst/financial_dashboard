@@ -646,6 +646,11 @@
             <input type="date" id="paydayAnchor" value="2026-01-10" style="padding:5px; border-radius:4px; border:1px solid #ccc; font-family:inherit;" onchange="updateAllProjections()">
         </div>
 
+        <div class="filter-group" style="margin-bottom: 10px;">
+            <span class="filter-label">Custom Goal ($):</span>
+            <input type="number" id="customGoalInput" value="1000000" step="10000" style="padding:5px; border-radius:4px; border:1px solid #ccc; font-family:inherit; width:120px;" onchange="updateAllProjections()">
+        </div>
+
         <div class="filter-group">
             <span class="filter-label">Select Annual Return:</span>
             
@@ -688,6 +693,14 @@
             <div class="stat-value" id="proj-house-date">-</div>
             <div class="stat-sub" id="proj-house-countdown" style="font-weight:bold; color:var(--primary); font-size:0.9em; margin-bottom:2px">-</div>
             <div class="stat-sub" id="proj-house-sub">Estimated Date</div>
+        </div>
+         <div class="stat-card">
+            <div class="stat-label">Custom Goal</div>
+            <div style="font-size:0.9em; font-weight:bold; margin-top:4px; color:var(--text);" id="custom-goal-display">$1M Goal</div>
+            <div style="font-size:0.9em; font-weight:bold; color:transparent; user-select:none;">-</div>
+            <div class="stat-value" id="proj-custom-date">-</div>
+            <div class="stat-sub" id="proj-custom-countdown" style="font-weight:bold; color:var(--primary); font-size:0.9em; margin-bottom:2px">-</div>
+            <div class="stat-sub" id="proj-custom-sub">Estimated Date</div>
         </div>
     </div>
 
@@ -1439,12 +1452,21 @@
         document.getElementById('proj-house-date').innerText = meta.houseDate ? meta.houseDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) : "Not Reached";
         document.getElementById('proj-house-countdown').innerText = formatCountdown(meta.houseDate);
         document.getElementById('proj-house-sub').innerText = `Estimated Date (${(rate*100).toFixed(1)}% Rtn)`;
+
+        // Update Custom Goal Card
+        document.getElementById('custom-goal-display').innerText = fmtMoneySimple(meta.customGoal) + " Goal";
+        document.getElementById('proj-custom-date').innerText = meta.customDate ? meta.customDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) : "Not Reached";
+        document.getElementById('proj-custom-countdown').innerText = formatCountdown(meta.customDate);
+        document.getElementById('proj-custom-sub').innerText = `Estimated Date (${(rate*100).toFixed(1)}% Rtn)`;
     }
 
     function renderProjectionChart(startBalance, startInflow, startDateStr, isSilent = false) {
         const rates = [0.05, 0.075, 0.10, 0.125, 0.15];
         projectionDataStore = {};
         projectionMetadata = {};
+        
+        // Get Custom Goal
+        const customGoal = parseFloat(document.getElementById('customGoalInput').value) || 1000000;
 
         const currentYear = new Date().getFullYear();
         const endYear = currentYear + 25;
@@ -1548,12 +1570,13 @@
                  payTracker.setDate(payTracker.getDate() + 14);
             }
 
-            let porscheBought = false, houseBought = false;
+            let porscheBought = false, houseBought = false, customReached = false;
             let currentYearStats = { year: timeline[0].getFullYear(), startBal: balance, annualContrib: 0, annualGrowth: 0 };
             let yearlyData = [];
             
             let porscheDate = null;
             let houseDate = null;
+            let customDate = null;
 
             const dataPoints = timeline.map((date, i) => {
                 const year = date.getFullYear();
@@ -1599,6 +1622,12 @@
                 balance += monthlyContrib;
                 currentYearStats.annualContrib += monthlyContrib;
 
+                // Check Custom Goal
+                if (balance >= customGoal && !customReached) {
+                    customReached = true;
+                    customDate = date;
+                }
+
                 if (balance >= 3000000 && !porscheBought) {
                     balance -= 300000; porscheBought = true;
                     porscheDate = date;
@@ -1628,7 +1657,9 @@
                 finalLiquid: finalBalance,
                 totalNW: totalNW,
                 porscheDate: porscheDate,
-                houseDate: houseDate
+                houseDate: houseDate,
+                customDate: customDate,
+                customGoal: customGoal
             };
 
             datasets.push({ label: (rate * 100).toFixed(1) + '%', data: dataPoints, borderColor: projColors[idx], backgroundColor: projColors[idx], borderWidth: 2, pointRadius: 0, tension: 0.4 });
@@ -2198,7 +2229,18 @@
             },
             options: { 
                 animation: isSilent ? false : {}, // Disable animation if silent update
-                maintainAspectRatio: false, layout: { padding: 80 }, plugins: { legend: { display: false }, tooltip: { callbacks: { label: (ctx) => ctx.label + ': ' + fmtMoney(ctx.raw) + ' (' + ((ctx.raw/totalPortfolio)*100).toFixed(1) + '%)' } }, datalabels: { color: '#2c3e50', anchor: 'end', align: 'end', offset: 10, formatter: (val, ctx) => (val/totalPortfolio > 0.01) ? ctx.chart.data.labels[ctx.dataIndex] + '\n' + fmtMoneySimple(val) : '' } } }
+                maintainAspectRatio: false, layout: { padding: 80 }, plugins: { legend: { display: false }, tooltip: { callbacks: { label: (ctx) => ctx.label + ': ' + fmtMoney(ctx.raw) + ' (' + ((ctx.raw/totalPortfolio)*100).toFixed(1) + '%)' } }, 
+                datalabels: { 
+                    color: '#2c3e50', 
+                    anchor: 'end', 
+                    align: 'end', 
+                    offset: 10, 
+                    formatter: (val, ctx) => {
+                        const pct = ((val/totalPortfolio)*100).toFixed(1) + '%';
+                        return (val/totalPortfolio > 0.01) ? ctx.chart.data.labels[ctx.dataIndex] + '\n' + fmtMoneySimple(val) + '\n(' + pct + ')' : '';
+                    }
+                } 
+            } }
         });
 
         if (charts.balance) charts.balance.destroy();
