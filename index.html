@@ -147,7 +147,7 @@
 
         /* FLOATING STATUS BOX */
         .status-floater {
-            /* Position Absolute allows it to scroll with the page natively (no jitter) */
+            /* Position Absolute allows it to scroll with the page natively */
             position: absolute; 
             /* X Axis is fixed by CSS to align with theme switch logic */
             right: 60px; 
@@ -161,8 +161,8 @@
             display: flex;
             flex-direction: column;
             align-items: flex-end;
-            /* Smooth transition only for top when docking occurs */
-            transition: top 0.3s ease;
+            /* REMOVED TRANSITION TO PREVENT JUMPING */
+            /* transition: top 0.3s ease; */ 
         }
         
         /* DOCKED STATE: Locks to top of screen */
