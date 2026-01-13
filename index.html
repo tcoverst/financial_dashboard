@@ -40,7 +40,9 @@
             --slider-connect: #2c3e50;
             --slider-bg: #dcdcdc;
             --slider-handle-bg: #fff;
-            
+            --slider-tooltip: transparent;
+            --slider-tooltip-text: #2c3e50;
+
             /* Fonts & Structure */
             --font-main: 'Inter', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
         }
@@ -65,7 +67,9 @@
             /* Slider Dark Mode */
             --slider-connect: rgba(52, 152, 219, 0.4); /* Transparent Neon Blue */
             --slider-bg: #222;
-            --slider-handle-bg: #1a1a1a; /* Dark Grey/Black Square */
+            --slider-handle-bg: #1a1a1a; 
+            --slider-tooltip: transparent;
+            --slider-tooltip-text: #95a5a6; /* Muted text like chart axis */
         }
 
         /* Specific text color overrides for visibility in dark mode */
@@ -370,24 +374,25 @@
         }
         .noUi-handle::before, .noUi-handle::after { display: none; }
         
-        /* DATE TOOLTIPS - UPDATED DIAGONAL STYLE */
+        /* DATE TOOLTIPS - MATCHING CHART X-AXIS */
         .noUi-tooltip { 
-            background: transparent; /* Transparent like axis labels */
-            color: var(--text);      /* Matches chart text color */
-            font-family: var(--font-main); /* Matches chart font */
-            font-size: 10px;         /* Standard Chart.js tick size */
+            background: transparent; /* No background */
+            color: var(--slider-tooltip-text); 
+            font-size: 10px; /* Standard Chart Tick Size */
             padding: 0; 
             border: none; 
-            border-radius: 0;
             
-            /* Position Below & Rotate 45deg */
+            /* Position Below */
             bottom: auto;
-            top: 25px; 
+            top: 20px; 
             
+            /* MATCHING CHART STYLE: Font, Rotation, Origin */
+            font-family: var(--font-main);
             transform: rotate(45deg);
             transform-origin: left top;
             text-align: left;
-            left: 2px;
+            margin-left: 5px; /* Slight offset to align with handle center */
+            white-space: nowrap;
         }
 
         /* Loading Overlay */
@@ -2217,11 +2222,7 @@
                 animation: isSilent ? false : {}, 
                 responsive: true, maintainAspectRatio: false, layout: { padding: { right: isMobile ? 90 : 150 } }, interaction: { mode: 'index', intersect: false },
                 plugins: { legend: { align: isMobile ? 'start' : 'center', position: 'top', labels: { boxWidth: isMobile ? 12 : 40, padding: 10 } }, datalabels: { align: 'right', anchor: 'end', offset: 5, backgroundColor: 'white', borderColor: (ctx) => ctx.dataset.borderColor, borderWidth: 1, borderRadius: 4, padding: isMobile ? 4 : 6, color: 'black', font: { weight: 'bold', size: isMobile ? 9 : 10 }, formatter: (val, ctx) => (ctx.dataIndex === ctx.dataset.data.length - 1 && val > 500) ? ctx.dataset.label + '\n' + fmtMoneySimple(val) : null, display: (ctx) => ctx.dataIndex === ctx.dataset.data.length - 1 } },
-                scales: { 
-                    y: { beginAtZero: true, stacked: true },
-                    // FORCE X-AXIS ROTATION TO MATCH SLIDER
-                    x: { ticks: { minRotation: 45, maxRotation: 45 } }
-                }
+                scales: { y: { beginAtZero: true, stacked: true } }
             }
         });
 
