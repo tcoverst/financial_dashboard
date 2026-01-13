@@ -237,7 +237,7 @@
         }
         .noUi-handle::before, .noUi-handle::after { display: none; }
         
-        /* DATE TOOLTIPS - ROTATED -45 DEG (OPPOSITE WAY) */
+        /* SLIDER TOOLTIPS - GENERAL */
         #balanceSlider .noUi-tooltip { 
             background: transparent; 
             color: var(--slider-tooltip-text); 
@@ -245,17 +245,22 @@
             padding: 0; 
             border: none; 
             
-            /* Position Below */
+            /* UPDATED: Lowered further */
             bottom: auto;
-            top: 25px; 
+            top: 38px; 
             
             /* TRANSFORM: Rotate -45deg (/) */
             transform: rotate(-45deg) !important;
             transform-origin: center top !important;
             
-            /* Align text correctly for the rotation */
             text-align: right; 
             white-space: nowrap;
+        }
+
+        /* SLIDER TOOLTIP - LEFT HANDLE SPECIFIC */
+        /* This overrides the general tooltip position for the lower handle to put text on the left */
+        #balanceSlider .noUi-handle-lower .noUi-tooltip {
+            left: -15px; /* Shift to left side */
         }
 
         /* Loading Overlay */
