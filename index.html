@@ -1182,8 +1182,8 @@
         const cMatch = palette[2];
         const cEdu = palette[1];
         const cBonus = palette[4];
-
-        // PERSIST HIDDEN DATASETS
+        
+        // LEGEND PERSISTENCE
         let stHidden = [];
         if (charts.salaryTrend) {
             stHidden = charts.salaryTrend.data.datasets.map((d, i) => !charts.salaryTrend.isDatasetVisible(i));
@@ -1204,17 +1204,17 @@
                     { 
                         label: 'Company Match', data: data.map(d => d.matchAmt), 
                         backgroundColor: cMatch + '88', borderColor: cMatch, borderWidth: 1, stack: 'Stack 0',
-                        hidden: stHidden[1] ?? false
+                        hidden: stHidden[1] ?? false 
                     },
                     { 
                         label: 'Education (YTD)', data: data.map(d => d.ytdEdu), 
                         backgroundColor: cEdu + '88', borderColor: cEdu, borderWidth: 1, stack: 'Stack 0',
-                        hidden: stHidden[2] ?? false
+                        hidden: stHidden[2] ?? false 
                     },
                     { 
                         label: 'Bonus (YTD)', data: data.map(d => d.ytdBonus), 
                         backgroundColor: cBonus + '88', borderColor: cBonus, borderWidth: 1, stack: 'Stack 0',
-                        hidden: stHidden[3] ?? false
+                        hidden: stHidden[3] ?? false 
                     }
                 ]
             },
@@ -1722,13 +1722,14 @@
                  
                  if(entry.isLive && (entry.invested.includes('VIGIX') || entry.invested.includes('VTSAX'))) {
                      const dataDate = new Date(entry.timestamp * 1000);
+                     const dateStr = dataDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+
                      const today = new Date();
                      const isSameDay = dataDate.getDate() === today.getDate() && dataDate.getMonth() === today.getMonth();
                      
                      const dotClass = isSameDay ? 'status-updated' : 'status-pending';
-                     const tooltip = isSameDay ? 'NAV Updated' : 'NAV Pending';
                      
-                     dailyBadge = `<br><span class="daily-tag"><span class="status-dot ${dotClass}" title="${tooltip}"></span>Daily</span>`;
+                     dailyBadge = `<br><span class="daily-tag"><span class="status-dot ${dotClass}" title="NAV Date"></span>${dateStr}</span>`;
                  }
                  
                  marketGainDisplay = `<span class="${gainClass}">${gainText}${pctText}</span>`;
@@ -2070,7 +2071,7 @@
             } }
         });
 
-        // PERSIST HIDDEN DATASETS
+        // LEGEND PERSISTENCE (BALANCE CHART)
         let balHidden = [];
         if (charts.balance) {
             balHidden = charts.balance.data.datasets.map((d, i) => !charts.balance.isDatasetVisible(i));
@@ -2079,7 +2080,7 @@
 
         const persistentDatasets = stackedDatasets.map((ds, i) => ({
             ...ds,
-            hidden: balHidden[i] !== undefined ? balHidden[i] : false
+            hidden: balHidden[i] ?? false
         }));
 
         charts.balance = new Chart(document.getElementById('balanceChart'), {
