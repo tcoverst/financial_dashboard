@@ -245,29 +245,33 @@
             padding: 0; 
             border: none; 
             
-            /* UPDATED: Lowered further to 48px */
             bottom: auto;
             top: 48px; 
-            left: 50%;
             
             /* TRANSFORM: Rotate -45deg (/) */
             transform: rotate(-45deg) !important;
-            transform-origin: center top !important;
             
-            text-align: right; 
             white-space: nowrap;
         }
 
-        /* SLIDER TOOLTIP - LEFT HANDLE SPECIFIC */
-        /* Symmetrical offset: shift left */
+        /* LEFT HANDLE SPECIFIC */
+        /* Anchor to the right of the tooltip box so it grows leftward */
         #balanceSlider .noUi-handle-lower .noUi-tooltip {
-            margin-left: -15px; 
+            left: auto;
+            right: 100%; /* Anchor to the left side of handle */
+            margin-right: -5px; /* Small tweak */
+            transform-origin: right top !important; /* Pivot from the side touching the handle */
+            text-align: right;
         }
 
-        /* SLIDER TOOLTIP - RIGHT HANDLE SPECIFIC */
-        /* Symmetrical offset: shift right */
+        /* RIGHT HANDLE SPECIFIC */
+        /* Anchor to the left of the tooltip box so it grows rightward */
         #balanceSlider .noUi-handle-upper .noUi-tooltip {
-            margin-left: 15px; 
+            left: 100%; /* Anchor to the right side of handle */
+            right: auto;
+            margin-left: -5px;
+            transform-origin: left top !important; /* Pivot from the side touching the handle */
+            text-align: left;
         }
 
         /* Loading Overlay */
