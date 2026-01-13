@@ -248,6 +248,7 @@
             /* UPDATED: Lowered further to 48px */
             bottom: auto;
             top: 48px; 
+            left: 50%;
             
             /* TRANSFORM: Rotate -45deg (/) */
             transform: rotate(-45deg) !important;
@@ -258,9 +259,15 @@
         }
 
         /* SLIDER TOOLTIP - LEFT HANDLE SPECIFIC */
-        /* Overrides position for the lower handle to shift text to the left */
+        /* Symmetrical offset: shift left */
         #balanceSlider .noUi-handle-lower .noUi-tooltip {
-            left: -35px; /* Shifted significantly left */
+            margin-left: -15px; 
+        }
+
+        /* SLIDER TOOLTIP - RIGHT HANDLE SPECIFIC */
+        /* Symmetrical offset: shift right */
+        #balanceSlider .noUi-handle-upper .noUi-tooltip {
+            margin-left: 15px; 
         }
 
         /* Loading Overlay */
@@ -362,7 +369,7 @@
         <div class="chart-container chart-container-tall">
             <canvas id="balanceChart"></canvas>
         </div>
-        <div style="padding: 10px 40px 60px 20px;">
+        <div style="padding: 10px 50px 60px 50px;">
             <div id="balanceSlider"></div>
         </div>
     </div>
