@@ -374,8 +374,9 @@
         }
         .noUi-handle::before, .noUi-handle::after { display: none; }
         
-        /* DATE TOOLTIPS - MATCHING CHART X-AXIS */
-        .noUi-tooltip { 
+        /* DATE TOOLTIPS - FIX SPECIFICITY & ROTATION */
+        /* Using ID selector to override library defaults */
+        #balanceSlider .noUi-tooltip { 
             background: transparent; /* No background */
             color: var(--slider-tooltip-text); 
             font-size: 10px; /* Standard Chart Tick Size */
@@ -384,14 +385,18 @@
             
             /* Position Below */
             bottom: auto;
-            top: 20px; 
+            top: 25px; 
+            left: 50%;
             
             /* MATCHING CHART STYLE: Font, Rotation, Origin */
             font-family: var(--font-main);
-            transform: rotate(45deg);
-            transform-origin: left top;
+            
+            /* OVERRIDE LIBRARY TRANSFORM */
+            /* Pivot at top-left to hang from the handle center */
+            transform: rotate(45deg) !important;
+            transform-origin: left top !important;
+            
             text-align: left;
-            margin-left: 5px; /* Slight offset to align with handle center */
             white-space: nowrap;
         }
 
@@ -521,7 +526,7 @@
         <div class="chart-container chart-container-tall">
             <canvas id="balanceChart"></canvas>
         </div>
-        <div style="padding: 10px 40px 50px 20px;">
+        <div style="padding: 10px 40px 60px 20px;">
             <div id="balanceSlider"></div>
         </div>
     </div>
