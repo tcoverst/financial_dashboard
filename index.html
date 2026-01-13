@@ -1183,7 +1183,13 @@
         const cEdu = palette[1];
         const cBonus = palette[4];
 
-        if (charts.salaryTrend) charts.salaryTrend.destroy();
+        // PERSIST HIDDEN DATASETS
+        let stHidden = [];
+        if (charts.salaryTrend) {
+            stHidden = charts.salaryTrend.data.datasets.map((d, i) => !charts.salaryTrend.isDatasetVisible(i));
+            charts.salaryTrend.destroy();
+        }
+
         charts.salaryTrend = new Chart(document.getElementById('salaryTrendChart'), {
             type: 'bar',
             plugins: [ChartDataLabels],
@@ -1192,19 +1198,23 @@
                 datasets: [
                     { 
                         label: 'Base Salary', data: data.map(d => d.salary), 
-                        backgroundColor: cSalary + '88', borderColor: cSalary, borderWidth: 1, stack: 'Stack 0' 
+                        backgroundColor: cSalary + '88', borderColor: cSalary, borderWidth: 1, stack: 'Stack 0',
+                        hidden: stHidden[0] ?? false 
                     }, 
                     { 
                         label: 'Company Match', data: data.map(d => d.matchAmt), 
-                        backgroundColor: cMatch + '88', borderColor: cMatch, borderWidth: 1, stack: 'Stack 0' 
+                        backgroundColor: cMatch + '88', borderColor: cMatch, borderWidth: 1, stack: 'Stack 0',
+                        hidden: stHidden[1] ?? false
                     },
                     { 
                         label: 'Education (YTD)', data: data.map(d => d.ytdEdu), 
-                        backgroundColor: cEdu + '88', borderColor: cEdu, borderWidth: 1, stack: 'Stack 0' 
+                        backgroundColor: cEdu + '88', borderColor: cEdu, borderWidth: 1, stack: 'Stack 0',
+                        hidden: stHidden[2] ?? false
                     },
                     { 
                         label: 'Bonus (YTD)', data: data.map(d => d.ytdBonus), 
-                        backgroundColor: cBonus + '88', borderColor: cBonus, borderWidth: 1, stack: 'Stack 0' 
+                        backgroundColor: cBonus + '88', borderColor: cBonus, borderWidth: 1, stack: 'Stack 0',
+                        hidden: stHidden[3] ?? false
                     }
                 ]
             },
@@ -2060,10 +2070,21 @@
             } }
         });
 
-        if (charts.balance) charts.balance.destroy();
+        // PERSIST HIDDEN DATASETS
+        let balHidden = [];
+        if (charts.balance) {
+            balHidden = charts.balance.data.datasets.map((d, i) => !charts.balance.isDatasetVisible(i));
+            charts.balance.destroy();
+        }
+
+        const persistentDatasets = stackedDatasets.map((ds, i) => ({
+            ...ds,
+            hidden: balHidden[i] !== undefined ? balHidden[i] : false
+        }));
+
         charts.balance = new Chart(document.getElementById('balanceChart'), {
             type: 'line', plugins: [ChartDataLabels],
-            data: { labels: sortedMonths, datasets: stackedDatasets },
+            data: { labels: sortedMonths, datasets: persistentDatasets },
             options: {
                 animation: isSilent ? false : {}, 
                 responsive: true, maintainAspectRatio: false, layout: { padding: { right: isMobile ? 90 : 150 } }, interaction: { mode: 'index', intersect: false },
