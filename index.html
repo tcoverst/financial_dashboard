@@ -425,6 +425,19 @@
     </div>
 
     <div class="card">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+             <h3>Yearly Performance Analysis</h3>
+             <div style="text-align:right;">
+                 <div style="font-size:0.7em; color:#7f8c8d; text-transform:uppercase;">Overall Average</div>
+                 <div style="font-size:1.2em; font-weight:bold; color:var(--primary);" id="stat-avg-yearly-return">-</div>
+             </div>
+        </div>
+        <div class="chart-container">
+            <canvas id="yearlyReturnChart"></canvas>
+        </div>
+    </div>
+
+    <div class="card">
         <h3>Wells Fargo Monthly Withdrawals (Last 24 Months)</h3>
         <div class="chart-container chart-container-small">
             <canvas id="wfWithdrawalChart"></canvas>
@@ -1925,8 +1938,11 @@
         const globalTotals = { balance: [], gainLoss: [], income: [], deposits: [], cumulative: [] };
         
         accounts.forEach(acc => alignedData[acc.id] = []);
+        
+        // --- YEARLY DATA AGGREGATION SETUP ---
+        const yearlyMap = new Map();
 
-        sortedMonths.forEach(monthKey => {
+        sortedMonths.forEach((monthKey, i) => {
             let monthBalance = 0, monthGain = 0, monthIncome = 0, monthDeposits = 0, monthCumulative = 0;
 
             accounts.forEach(acc => {
@@ -1948,7 +1964,46 @@
             globalTotals.income.push(monthIncome);
             globalTotals.deposits.push(monthDeposits);
             globalTotals.cumulative.push(monthCumulative);
+            
+            // --- YEARLY LOGIC ---
+            const y = monthKey.split('-')[0];
+            if(!yearlyMap.has(y)) {
+                yearlyMap.set(y, { 
+                    gain: 0, 
+                    netDep: 0,
+                    // Estimate start balance of year based on current month stats if first entry, else use previous month
+                    startBal: (i > 0) ? globalTotals.balance[i-1] : (monthBalance - monthGain - monthDeposits)
+                });
+            }
+            const yData = yearlyMap.get(y);
+            yData.gain += monthGain;
+            yData.netDep += monthDeposits; // Using Net Deposits for Modified Dietz approximation
         });
+        
+        // --- YEARLY CHART CALCULATIONS ---
+        const yearlyLabels = Array.from(yearlyMap.keys());
+        const yearlyReturns = [];
+        let sumPct = 0;
+        
+        yearlyLabels.forEach(y => {
+            const d = yearlyMap.get(y);
+            // Modified Dietz Approximation: Gain / (StartBal + 0.5 * NetInflow)
+            let denominator = d.startBal + (0.5 * d.netDep);
+            if(denominator <= 0) denominator = 1; 
+            
+            const pct = (d.gain / denominator) * 100;
+            yearlyReturns.push(pct);
+            sumPct += pct;
+        });
+        
+        const avgReturn = yearlyReturns.length ? sumPct / yearlyReturns.length : 0;
+        const avgEl = document.getElementById('stat-avg-yearly-return');
+        if(avgEl) {
+            avgEl.innerText = (avgReturn >= 0 ? '+' : '') + avgReturn.toFixed(2) + '%';
+            avgEl.className = avgReturn >= 0 ? 'text-green' : 'text-red';
+            avgEl.style.fontSize = "1.5em";
+            avgEl.style.fontWeight = "bold";
+        }
 
         const lastIndex = sortedMonths.length - 1;
         
@@ -2172,6 +2227,46 @@
             options: { 
                 animation: isSilent ? false : {}, 
                 responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { grid: { color: '#f0f0f0' } }, x: { grid: { display: false } } } 
+            }
+        });
+        
+        // --- YEARLY CHART RENDER ---
+        if (charts.yearly) charts.yearly.destroy();
+        charts.yearly = new Chart(document.getElementById('yearlyReturnChart'), {
+            type: 'bar',
+            plugins: [ChartDataLabels],
+            data: { 
+                labels: yearlyLabels, 
+                datasets: [{ 
+                    label: 'Yearly Return %', 
+                    data: yearlyReturns, 
+                    backgroundColor: yearlyReturns.map(v => v >= 0 ? cGreen + '88' : cRed + '88'),
+                    borderColor: yearlyReturns.map(v => v >= 0 ? cGreen : cRed),
+                    borderWidth: 1,
+                    borderRadius: 4
+                }] 
+            },
+            options: { 
+                animation: isSilent ? false : {}, 
+                responsive: true, maintainAspectRatio: false, 
+                plugins: { 
+                    legend: { display: false },
+                    datalabels: {
+                        color: '#2c3e50',
+                        anchor: 'end', 
+                        align: 'end', 
+                        offset: -5,
+                        font: { weight: 'bold' },
+                        formatter: (val) => val.toFixed(1) + '%'
+                    }
+                }, 
+                scales: { 
+                    y: { 
+                        grid: { color: '#f0f0f0' },
+                        ticks: { callback: (val) => val + '%' }
+                    }, 
+                    x: { grid: { display: false } } 
+                } 
             }
         });
 
