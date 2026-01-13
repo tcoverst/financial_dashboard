@@ -245,12 +245,9 @@
             padding: 0; 
             border: none; 
             
-            /* Vertical position: Clears the handles */
+            /* UPDATED: Lowered further to 48px */
             bottom: auto;
             top: 48px; 
-            
-            /* Center alignment base */
-            left: 50%;
             
             /* TRANSFORM: Rotate -45deg (/) */
             transform: rotate(-45deg) !important;
@@ -261,15 +258,9 @@
         }
 
         /* SLIDER TOOLTIP - LEFT HANDLE SPECIFIC */
-        /* Move Left Handle Text to the LEFT */
+        /* Overrides position for the lower handle to shift text to the left */
         #balanceSlider .noUi-handle-lower .noUi-tooltip {
-            left: -20px; 
-        }
-
-        /* SLIDER TOOLTIP - RIGHT HANDLE SPECIFIC */
-        /* Move Right Handle Text to the RIGHT */
-        #balanceSlider .noUi-handle-upper .noUi-tooltip {
-            left: 20px; 
+            left: -35px; /* Shifted significantly left */
         }
 
         /* Loading Overlay */
@@ -371,7 +362,7 @@
         <div class="chart-container chart-container-tall">
             <canvas id="balanceChart"></canvas>
         </div>
-        <div style="padding: 10px 60px 60px 60px;">
+        <div style="padding: 10px 40px 60px 20px;">
             <div id="balanceSlider"></div>
         </div>
     </div>
@@ -695,17 +686,13 @@
         const floater = document.getElementById('status-floater');
         if (!placeholder || !floater) return;
 
-        // Get the absolute position of the placeholder relative to document
         const rect = placeholder.getBoundingClientRect();
         const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
         initialPlaceholderTop = rect.top + scrollTop;
         
-        // If not docked, explicitly set the absolute top
-        // This ensures on resize it snaps to the correct new location
         if (!floater.classList.contains('docked')) {
             floater.style.top = initialPlaceholderTop + 'px';
         }
-        
         isInitialized = true;
     }
 
@@ -725,35 +712,29 @@
         if (!floater) return;
 
         const scrollY = window.scrollY;
-        // The dock position is 15px (to align with theme switch)
-        // We dock when we scroll PAST the placeholder's original position minus the desired top offset
         const dockThreshold = initialPlaceholderTop - 15;
 
         if (scrollY > dockThreshold) {
             if (!isDockedState) {
                 floater.classList.add('docked');
-                // Remove inline style so CSS class takes over 'top'
                 floater.style.top = ''; 
                 isDockedState = true;
             }
         } else {
             if (isDockedState) {
                 floater.classList.remove('docked');
-                // Restore absolute position
                 floater.style.top = initialPlaceholderTop + 'px';
                 isDockedState = false;
             }
         }
     }
 
-    // Bind Events
     window.addEventListener('scroll', onScroll);
     window.addEventListener('resize', () => {
         measurePlaceholder();
         updateStatusPosition();
     });
     window.addEventListener('DOMContentLoaded', () => {
-        // Slight delay to ensure layout is stable
         setTimeout(() => {
             measurePlaceholder();
             updateStatusPosition();
@@ -768,16 +749,14 @@
     // ==========================================
     // THEME HANDLING
     // ==========================================
-    let isSciFiMode = true; // Changed default variable
+    let isSciFiMode = true; 
 
-    // GLOBAL PALETTE DEFINITION - Used everywhere for consistency
     const palette = ['#3498db', '#9b59b6', '#2ecc71', '#e67e22', '#f1c40f', '#e74c3c'];
 
-    // RAISE CALCULATION GLOBALS
     let globalJanRaise = 0.06;
     let globalJulyRaise = 0.03;
-    let globalLatestBaseSalary = 130000; // Default fallback, updated by salary data
-    let globalPrevBaseSalary = 110300; // Track previous for delta calculation
+    let globalLatestBaseSalary = 130000; 
+    let globalPrevBaseSalary = 110300; 
     
     // NEW GLOBALS FOR INSTANT PROJECTION RECALC
     let g_lastBalance = 0;
@@ -788,41 +767,26 @@
         isSciFiMode = !isSciFiMode;
         document.body.classList.toggle('sci-fi-mode');
         
-        // Reload TradingView with correct theme
         initTradingView(isSciFiMode ? "dark" : "light");
-        
-        // Update Chart.js Styles
         updateChartStyles();
         
-        // Force Re-render of tables to apply new background color logic immediately
         if(globalAccountsData && globalAccountsData.length > 0) {
             processAndRender(globalAccountsData, true);
         }
         
-        // Measure again as layout might change slightly with fonts/borders
         setTimeout(measurePlaceholder, 300);
     }
 
-    function hexToRgba(hex, alpha) {
-        let r = parseInt(hex.slice(1, 3), 16),
-            g = parseInt(hex.slice(3, 5), 16),
-            b = parseInt(hex.slice(5, 7), 16);
-        return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-    }
-
     function updateChartStyles() {
-        // Set Global Chart Defaults so new elements inherit correctly
         Chart.defaults.color = isSciFiMode ? '#ecf0f1' : '#2c3e50';
         Chart.defaults.borderColor = isSciFiMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)';
 
         const textColor = isSciFiMode ? '#ecf0f1' : '#2c3e50';
         const gridColor = isSciFiMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)';
-        const alphaFill = isSciFiMode ? 0.3 : 0.6; 
 
         Object.values(charts).forEach(chart => {
             if (!chart) return;
 
-            // Update Scales
             if (chart.options.scales) {
                 ['x', 'y'].forEach(axis => {
                     if (chart.options.scales[axis]) {
@@ -833,7 +797,6 @@
                 });
             }
 
-            // Update Plugins (Legend, Title, Datalabels)
             if (chart.options.plugins) {
                 if (chart.options.plugins.legend) {
                      chart.options.plugins.legend.labels.color = textColor;
@@ -846,11 +809,9 @@
                 }
             }
             
-            // SPECIFIC FIX FOR BALANCE CHART LABELS
             if (chart.canvas.id === 'balanceChart') {
                 if (chart.options.plugins && chart.options.plugins.datalabels) {
                     if (isSciFiMode) {
-                        // Dark Mode: Colored Background, White Text
                         chart.options.plugins.datalabels.backgroundColor = function(context) {
                             return context.dataset.backgroundColor;
                         };
@@ -859,7 +820,6 @@
                         };
                         chart.options.plugins.datalabels.color = '#ffffff'; 
                     } else {
-                        // Light Mode: White Background, Black Text
                         chart.options.plugins.datalabels.backgroundColor = 'white';
                         chart.options.plugins.datalabels.borderColor = function(context) {
                             return context.dataset.borderColor;
@@ -868,19 +828,10 @@
                     }
                 }
             } else {
-                 // General Datalabels update for other charts (text color only)
                  if (chart.options.plugins && chart.options.plugins.datalabels) {
                     chart.options.plugins.datalabels.color = textColor;
                 }
             }
-
-            // Update Datasets (Transparency)
-            chart.data.datasets.forEach(dataset => {
-                if (dataset.backgroundColor && typeof dataset.backgroundColor === 'string' && dataset.backgroundColor.startsWith('#')) {
-                    // This handles simple hex codes, but our logic often uses palette vars
-                    // The main chart logic below forces hex+88, so we let the main logic handle colors
-                } 
-            });
 
             chart.update();
         });
@@ -1011,7 +962,6 @@
                     }
                 }
 
-                // Get last timestamp for data freshness check
                 const lastTimestamp = timestamps[timestamps.length - 1];
 
                 if (!baselinePrice || !currentPrice) return 0;
@@ -1083,7 +1033,7 @@
                         rawWithdrawals: 0, 
                         isLive: true,
                         isError: false,
-                        timestamp: 0 // Initialize timestamp
+                        timestamp: 0 
                     };
                 } else {
                     liveEntry.isLive = true;
@@ -1108,7 +1058,7 @@
                     liveEntry.marketGain = growthAmount; 
                     liveEntry.balance = baselineEntry.balance + growthAmount + liveEntry.deposits + liveEntry.income;
                     liveEntry.cumulative = baselineEntry.cumulative + growthAmount + liveEntry.income;
-                    liveEntry.timestamp = marketData.ts; // Store timestamp
+                    liveEntry.timestamp = marketData.ts; 
                 }
 
                 if (isNewRow) {
@@ -1127,7 +1077,6 @@
         if(isUpdating) return;
         await updateWithLiveMarketData(globalAccountsData, true);
         processAndRender(globalAccountsData, true);
-        // Reset timer
         const isMarket = isMarketOpen();
         refreshTimer = isMarket ? 10 : 60;
     }
@@ -1151,7 +1100,6 @@
 
         data.sort((a,b) => new Date(a.date) - new Date(b.date));
         
-        // --- AUTO-CALCULATE RECENT RAISES ---
         const now = new Date();
         const currentYear = now.getFullYear();
 
@@ -1187,25 +1135,20 @@
             if (prev.salary > 0) globalJulyRaise = (closestJulyEntry.salary - prev.salary) / prev.salary;
         }
         
-        // Update UI Text in Breakdown
         const janPctText = (globalJanRaise * 100).toFixed(1) + '%';
         const julyPctText = (globalJulyRaise * 100).toFixed(1) + '%';
         document.getElementById('jan-raise-display').innerText = janPctText;
         document.getElementById('july-raise-display').innerText = julyPctText;
         
-        // Update Chart Subtitle
         const chartSub = document.getElementById('chart-subtitle-text');
         if(chartSub) {
             chartSub.innerHTML = `Baseline: Current Net Worth + Bi-Weekly Contributions (Full Dollar Raises Applied: <strong>${janPctText}</strong> Jan, <strong>${julyPctText}</strong> July)`;
         }
 
-        // --- END AUTO-CALCULATION ---
-
         if (data.length === 0) return;
         const latest = data[data.length - 1];
         const previous = data.length > 1 ? data[data.length - 2] : latest;
         
-        // UPDATE GLOBAL BASE SALARY FOR PROJECTIONS
         globalLatestBaseSalary = latest.salary;
         globalPrevBaseSalary = previous.salary;
         
@@ -1235,7 +1178,6 @@
             return dt.toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
         });
 
-        // REFINED COLORS: Blue, Green, Purple, Yellow
         const cSalary = palette[0];
         const cMatch = palette[2];
         const cEdu = palette[1];
@@ -1273,9 +1215,7 @@
                     datalabels: {
                         color: '#000000', 
                         font: { weight: 'bold', size: isMobile ? 6 : 8 }, 
-                        // Rotation: Horizontal on laptop, Vertical on Mobile
                         rotation: isMobile ? -90 : 0,
-                        // Dynamic Checker: Use 'auto' to hide colliding labels
                         display: 'auto',
                         formatter: (val) => val > 500 ? fmtMoneySimple(val) : ''
                     }
@@ -1391,18 +1331,13 @@
         const currentYear = new Date().getFullYear();
         const endYear = currentYear + 25;
         
-        // Parsing dates
         const parts = startDateStr.split('-');
         let currentDate = new Date(parseInt(parts[0]), parseInt(parts[1])-1, 1);
         
-        // PAYDAY ANCHOR SETUP
         const anchorInput = document.getElementById('paydayAnchor');
-        const anchorParts = anchorInput.value.split('-'); // Parse YYYY-MM-DD
+        const anchorParts = anchorInput.value.split('-'); 
         
-        // --- SMART BASE PAYCHECK CALCULATION ---
         let baselineMonthDate = new Date(currentDate);
-        // Force calculation on the LAST COMPLETE MONTH (Dec) to get stable baseline
-        // If data is Jan 2026, currentDate is Jan 1. previous is Dec.
         baselineMonthDate.setMonth(baselineMonthDate.getMonth() - 1); 
         
         let blStart = new Date(baselineMonthDate.getFullYear(), baselineMonthDate.getMonth(), 1);
@@ -1417,26 +1352,17 @@
             blTracker.setDate(blTracker.getDate() + 14);
         }
         
-        if(paychecksInBaseline < 1) paychecksInBaseline = 2; // Fallback
+        if(paychecksInBaseline < 1) paychecksInBaseline = 2; 
         
-        // Use the Invested Inflow (passed in) divided by paychecks count
         let paycheckAmount = startInflow / paychecksInBaseline;
         
-        // --- FORCE RAISE APPLICATION ---
-        // The baseline is derived from Dec 2025 (pre-raise).
-        // The Projection starts Jan 2026 (post-raise).
-        // We calculate the Dollar Delta of the raise explicitly.
         let raiseDelta = (globalLatestBaseSalary - globalPrevBaseSalary) / 26;
-        if(raiseDelta < 0) raiseDelta = 0; // Safety
+        if(raiseDelta < 0) raiseDelta = 0; 
         
-        // Apply the raise to the starting paycheck amount for the projection
         let displayPaycheckAmount = paycheckAmount + raiseDelta;
         
-        // UPDATE UI WITH ADJUSTED PAYCHECK AMOUNT
         const ppEl = document.getElementById('per-paycheck-amt');
         if(ppEl) ppEl.innerText = fmtMoney(displayPaycheckAmount);
-
-        // ----------------------------------------
 
         const labels = [];
         const timeline = [];
@@ -1476,16 +1402,12 @@
 
         rates.forEach((rate, idx) => {
             let balance = startBalance;
-            // Initialize with the POST-RAISE amount
             let currentPaycheck = displayPaycheckAmount; 
             
-            // "Save the Raise" tracking - Start from current high salary
             let modeledSalaryCheck = globalLatestBaseSalary / 26; 
 
-            // Independent Tracker for Paydays for this Rate simulation
             let payTracker = new Date(parseInt(anchorParts[0]), parseInt(anchorParts[1])-1, parseInt(anchorParts[2]));
 
-            // Pre-roll tracker to start of timeline
             while(payTracker < timeline[0]) {
                  payTracker.setDate(payTracker.getDate() + 14);
             }
@@ -1507,8 +1429,6 @@
                     currentYearStats = { year: year, startBal: balance, annualContrib: 0, annualGrowth: 0 };
                 }
 
-                // Future Raises (Beyond the initial Jan one which is baked in)
-                // We skip the first Jan check (i=0) because we manually added that raise to 'currentPaycheck' above
                 if (i > 0) {
                     let raiseAmt = 0;
                     if (date.getMonth() === 0) {
@@ -1523,7 +1443,6 @@
                     }
                 }
 
-                // Determine Paychecks in this specific month
                 let paychecksInMonth = 0;
                 const monthStart = new Date(date.getFullYear(), date.getMonth(), 1);
                 const monthEnd = new Date(date.getFullYear(), date.getMonth() + 1, 0);
@@ -1542,7 +1461,6 @@
                 balance += monthlyContrib;
                 currentYearStats.annualContrib += monthlyContrib;
 
-                // Check Custom Goal
                 if (balance >= customGoal && !customReached) {
                     customReached = true;
                     customDate = date;
@@ -1585,7 +1503,6 @@
             datasets.push({ label: (rate * 100).toFixed(1) + '%', data: dataPoints, borderColor: projColors[idx], backgroundColor: projColors[idx], borderWidth: 2, pointRadius: 0, tension: 0.4 });
         });
 
-        // Initial Update
         updateAllProjections();
 
         if (charts.projection) charts.projection.destroy();
@@ -1632,7 +1549,6 @@
                 
                 let month = dateParts[0].padStart(2, '0');
                 let year = dateParts[2];
-                // Net transfers for main chart
                 const netTransfers = deposits + withdrawals;
 
                 data.push({
@@ -1660,12 +1576,10 @@
             const response = await fetch(API_URL);
             const rawData = await response.json();
 
-            // 1. Salary
             if (rawData.salary) {
                 processSalaryData(rawData.salary);
             }
 
-            // 2. Investments - Cleaned Names
             const accounts = [
                 { id: 'wellsFargo', name: 'Wells Fargo', data: parseSheetData(rawData.wellsFargo) },
                 { id: 'fidelity', name: 'Fidelity', data: parseSheetData(rawData.fidelity) },
@@ -1677,16 +1591,13 @@
             
             globalAccountsData = accounts;
 
-            // 3. APPLY REAL-TIME MARKET DATA (Initial)
             await updateWithLiveMarketData(accounts, false);
 
             processAndRender(accounts, false);
             
-            // Hide loading
             document.getElementById('loading').style.opacity = '0';
             setTimeout(() => { document.getElementById('loading').style.display = 'none'; }, 300);
 
-            // 4. START AUTO-REFRESH
             startAutoRefresh();
 
         } catch (error) {
@@ -1699,45 +1610,37 @@
         const now = new Date();
         const day = now.getDay();
         
-        // 0 = Sun, 6 = Sat
         if (day === 0 || day === 6) return false;
         
-        // Convert to ET to check 9:30 AM - 4:00 PM
         const etTime = now.toLocaleString("en-US", {timeZone: "America/New_York"});
         const etDate = new Date(etTime);
         const h = etDate.getHours();
         const m = etDate.getMinutes();
         
         const minutesOfDay = h * 60 + m;
-        const start = 9 * 60 + 30; // 9:30 AM
-        const end = 16 * 60;       // 4:00 PM
+        const start = 9 * 60 + 30; 
+        const end = 16 * 60;       
         
         return minutesOfDay >= start && minutesOfDay < end;
     }
 
     function startAutoRefresh() {
-        // Initial setup
         let isMarket = isMarketOpen();
         refreshTimer = isMarket ? 10 : 60;
 
-        // Ticking every second to handle the UI countdown and logic switching
         setInterval(() => {
             refreshTimer--;
             
-            // Check if market status changed
             const currentMarketStatus = isMarketOpen();
             if (currentMarketStatus !== isMarket) {
                 isMarket = currentMarketStatus;
-                // Don't reset timer immediately to avoid jumps, but next reset will use new time
             }
             
             if (refreshTimer <= 0) {
-                // Trigger Refresh
                 console.log("Auto-Refreshing Market Data...");
-                updateWithLiveMarketData(globalAccountsData, true); // Silent = true
-                processAndRender(globalAccountsData, true); // Silent render
+                updateWithLiveMarketData(globalAccountsData, true); 
+                processAndRender(globalAccountsData, true); 
                 
-                // Reset timer based on current market status
                 refreshTimer = isMarket ? 10 : 60;
             }
             
@@ -1771,7 +1674,6 @@
             const entry = alignedData[acc.id][index];
             if (entry.balance < 0.01) return;
             
-            // Accumulate totals
             sumBal += entry.balance;
             sumGain += (entry.marketGain + entry.income);
             sumInflow += (entry.deposits + entry.income);
@@ -1781,7 +1683,6 @@
 
             const tr = document.createElement('tr');
             if(entry.isLive) {
-                // If live, standard mode uses light yellow, scifi mode needs to handle it via CSS or JS
                 tr.style.backgroundColor = isSciFiMode ? 'rgba(255, 255, 0, 0.05)' : "#fef9e7"; 
             }
 
@@ -1792,7 +1693,6 @@
             
             const liveTag = entry.isLive ? '<span style="background:red; color:white; font-size:9px; padding:1px 3px; border-radius:3px; margin-left:5px; vertical-align:middle;">LIVE</span>' : '';
             
-            // Error handling display
             let marketGainDisplay = "";
             let dailyBadge = "";
             
@@ -1803,8 +1703,6 @@
                  const gainClass = entry.marketGain >= 0 ? 'text-green' : 'text-red';
                  const gainText = (entry.marketGain >= 0 ? '+' : '') + fmtMoney(entry.marketGain + entry.income);
                  
-                 // Calculate 1-Mo Percentage for display
-                 // Logic: Gain / (EndBalance - Gain) [Approximate starting balance for that month's gain]
                  let oneMoPct = 0;
                  const estimatedStartBal = entry.balance - (entry.marketGain + entry.income); 
                  if(estimatedStartBal > 0) {
@@ -1812,7 +1710,6 @@
                  }
                  const pctText = ` <span style="font-size:0.8em; opacity:0.8">(${oneMoPct >= 0 ? '+' : ''}${oneMoPct.toFixed(1)}%)</span>`;
                  
-                 // Mutual Fund Logic
                  if(entry.isLive && (entry.invested.includes('VIGIX') || entry.invested.includes('VTSAX'))) {
                      const dataDate = new Date(entry.timestamp * 1000);
                      const today = new Date();
@@ -1848,11 +1745,9 @@
             body.appendChild(tr);
         });
         
-        // TOTAL ROW Logic
         let totalRoi = 0;
         if (sumNetDep !== 0) totalRoi = (sumCum / sumNetDep) * 100;
         
-        // ADDED: Total 1-Mo Gain %
         let totalOneMoPct = 0;
         const totalEstStartBal = sumBal - sumGain;
         if (totalEstStartBal > 0) {
@@ -1886,7 +1781,6 @@
         const labels = relevantData.map(d => d.key);
         const values = relevantData.map(d => Math.abs(d.rawWithdrawals)); 
         
-        // Consistent Red
         const cRed = palette[5];
 
         if (charts.wfWithdrawal) charts.wfWithdrawal.destroy();
@@ -1898,7 +1792,7 @@
                 datasets: [{
                     label: 'Monthly Withdrawals',
                     data: values,
-                    backgroundColor: cRed + '88', // alpha
+                    backgroundColor: cRed + '88', 
                     borderColor: cRed,
                     borderWidth: 1,
                     borderRadius: 2,
@@ -1907,15 +1801,15 @@
                 }]
             },
             options: {
-                animation: isSilent ? false : {}, // Disable animation if silent update
+                animation: isSilent ? false : {}, 
                 responsive: true, maintainAspectRatio: false,
                 plugins: {
                     legend: { display: false },
                     datalabels: {
                         color: '#2c3e50',
-                        anchor: isMobile ? 'end' : 'end', // Anchor top for both
-                        align: isMobile ? 'top' : 'end', // Top (vertical) or Right (horizontal)
-                        rotation: isMobile ? -90 : 0,    // Rotate only on mobile
+                        anchor: isMobile ? 'end' : 'end', 
+                        align: isMobile ? 'top' : 'end', 
+                        rotation: isMobile ? -90 : 0,    
                         font: { weight: 'bold', size: 9 },
                         formatter: (val) => val > 200 ? fmtMoneySimple(val) : '' 
                     }
@@ -1931,12 +1825,10 @@
     function initIncomeAnalysis(accounts) {
         const container = document.getElementById('income-filter-container');
         
-        if (container.children.length > 1) return; // Prevent duplicates
+        if (container.children.length > 1) return; 
 
-        // Define Defaults: Wells, UTMA, Plan A, Plan B
         const defaultIds = ['wellsFargo', 'vanguardUTMA', 'vanguardA', 'vanguardB'];
 
-        // Create Checkboxes
         accounts.forEach(acc => {
             const label = document.createElement('label');
             label.className = 'checkbox-item';
@@ -1945,7 +1837,7 @@
             container.appendChild(label);
         });
 
-        updateIncomeAnalysis(false); // Initial load has animation
+        updateIncomeAnalysis(false); 
     }
 
     function updateIncomeAnalysis(isSilent = false) {
@@ -1954,10 +1846,9 @@
 
         const targetAccounts = globalAccountsData.filter(a => selectedIds.includes(a.id));
         
-        // Align Data by Month
         const allMonths = new Set();
         globalAccountsData.forEach(acc => acc.data.forEach(d => { if(!d.isLive) allMonths.add(d.key); }));
-        const sortedMonths = Array.from(allMonths).sort().slice(-24); // Last 24 months
+        const sortedMonths = Array.from(allMonths).sort().slice(-24); 
 
         const incomeData = sortedMonths.map(month => {
             let sum = 0;
@@ -1968,12 +1859,10 @@
             return sum;
         });
 
-        // Update Trailing 12
         const last12Data = incomeData.slice(-12);
         const trailing12Sum = last12Data.reduce((a,b) => a+b, 0);
         document.getElementById('stat-12mo-income').innerText = fmtMoneySimple(trailing12Sum);
 
-        // Render Chart - Use Green from Palette
         const cGreen = palette[2];
 
         if(charts.incomeTrend) charts.incomeTrend.destroy();
@@ -1995,13 +1884,13 @@
                 }]
             },
             options: {
-                animation: isSilent ? false : {}, // Disable animation if silent update
+                animation: isSilent ? false : {}, 
                 responsive: true, maintainAspectRatio: false,
                 plugins: {
                     legend: { display: false },
                     datalabels: {
                         color: '#2c3e50',
-                        anchor: isMobile ? 'end' : 'end', // Matches WF Chart
+                        anchor: isMobile ? 'end' : 'end', 
                         align: isMobile ? 'top' : 'end', 
                         rotation: isMobile ? -90 : 0,    
                         font: { weight: 'bold', size: 9 },
@@ -2052,7 +1941,6 @@
 
         const lastIndex = sortedMonths.length - 1;
         
-        // Update Live Header with Time
         const now = new Date();
         const timeString = now.toLocaleTimeString();
         document.getElementById('latest-date-display').innerHTML = `<span class="live-dot"></span>Data as of ${sortedMonths[lastIndex]} (${timeString})`;
@@ -2060,11 +1948,9 @@
         
         document.getElementById('stat-networth').innerText = fmtMoney(globalTotals.balance[lastIndex]);
         
-        // --- 1. TOTAL LIFETIME GAIN PERCENTAGE ---
         const totalGain = globalTotals.cumulative[lastIndex];
         const gainEl = document.getElementById('stat-lifetime-gain');
         
-        // Net Invested = Current Balance - Total Gain
         let netInvested = globalTotals.balance[lastIndex] - totalGain;
         let lifetimePct = 0;
         if(netInvested !== 0) {
@@ -2075,12 +1961,9 @@
         gainEl.innerHTML = (totalGain >= 0 ? '+' : '') + fmtMoney(totalGain) + lifetimePctText;
         gainEl.className = 'stat-value ' + (totalGain >= 0 ? 'text-green' : 'text-red');
 
-        // --- 2. LATEST MONTHLY P&L PERCENTAGE ---
         const monthlyPL = globalTotals.gainLoss[lastIndex];
         const plEl = document.getElementById('stat-monthly-pl');
         
-        // Estimated Start Balance = End Balance - Gain
-        // Note: Using simpler "End - Gain" logic consistent with snapshot tables
         let estMonthlyStart = globalTotals.balance[lastIndex] - monthlyPL;
         let monthlyPct = 0;
         if (estMonthlyStart !== 0) {
@@ -2098,14 +1981,9 @@
         document.getElementById('stat-monthly-inflow').innerText = fmtMoney(totalInflow);
         document.getElementById('stat-monthly-inflow-sub').innerHTML = `Income: ${fmtMoney(lastIncome)} <span style="margin:0 4px; color:#ccc">|</span> Net Dep: ${fmtMoney(lastDeposits)}`;
 
-        // ==========================================
-        // PROJECTION INFLOW ADJUSTMENT
-        // ==========================================
-        // Calculate inflow specifically for INVESTMENTS (Vanguard A + B), ignoring Cash (Wells) and UTMA
-        // We use the LAST COMPLETE MONTH (lastIndex - 1, usually December) as the stable baseline.
         let investmentInflow = 0;
         if (lastIndex > 0) {
-            const baselineMonth = sortedMonths[lastIndex - 1]; // December
+            const baselineMonth = sortedMonths[lastIndex - 1]; 
             accounts.forEach(acc => {
                 if (acc.id === 'vanguardA' || acc.id === 'vanguardB' || acc.id === 'fidelity') {
                     const entry = alignedData[acc.id].find(d => d.key === baselineMonth);
@@ -2115,7 +1993,7 @@
                 }
             });
         } else {
-            investmentInflow = totalInflow; // Fallback
+            investmentInflow = totalInflow; 
         }
         
         // STORE GLOBAL STATE FOR INSTANT RECALC
@@ -2134,20 +2012,14 @@
             };
         });
         
-        // RENDER TABLES (Live and Previous)
-        // Pass the Month Key strings to update the titles
         createSnapshotTable(accounts, alignedData, lastIndex, 'snapshotBody', 'currentSnapshotHeader', sortedMonths[lastIndex]);
         createSnapshotTable(accounts, alignedData, lastIndex - 1, 'prevSnapshotBody', 'prevSnapshotHeader', sortedMonths[lastIndex-1]);
         
-        // RENDER WF WIDGET
         renderWellsFargoWidget(accounts, isSilent);
 
-        // INITIALIZE INCOME ANALYSIS (New)
         initIncomeAnalysis(accounts);
-        // Explicitly update chart for refresh cycles (init only runs once)
         updateIncomeAnalysis(isSilent);
 
-        // CHARTS
         const allocation = {};
         accounts.forEach(acc => {
             const latest = alignedData[acc.id][lastIndex];
@@ -2160,7 +2032,6 @@
         const allocValues = Object.values(allocation);
         const totalPortfolio = allocValues.reduce((a, b) => a + b, 0);
 
-        // Allocation Donut - Uses standard Palette
         if (charts.allocation) charts.allocation.destroy();
         charts.allocation = new Chart(document.getElementById('allocationChart'), {
             type: 'doughnut', plugins: [ChartDataLabels],
@@ -2168,13 +2039,13 @@
                 labels: allocLabels, 
                 datasets: [{ 
                     data: allocValues, 
-                    backgroundColor: palette.map(c => c + '88'), // alpha background
-                    borderColor: palette, // solid border
+                    backgroundColor: palette.map(c => c + '88'), 
+                    borderColor: palette, 
                     borderWidth: 1
                 }] 
             },
             options: { 
-                animation: isSilent ? false : {}, // Disable animation if silent update
+                animation: isSilent ? false : {}, 
                 maintainAspectRatio: false, layout: { padding: 80 }, plugins: { legend: { display: false }, tooltip: { callbacks: { label: (ctx) => ctx.label + ': ' + fmtMoney(ctx.raw) + ' (' + ((ctx.raw/totalPortfolio)*100).toFixed(1) + '%)' } }, 
                 datalabels: { 
                     color: '#2c3e50', 
@@ -2194,7 +2065,7 @@
             type: 'line', plugins: [ChartDataLabels],
             data: { labels: sortedMonths, datasets: stackedDatasets },
             options: {
-                animation: isSilent ? false : {}, // Disable animation if silent update
+                animation: isSilent ? false : {}, 
                 responsive: true, maintainAspectRatio: false, layout: { padding: { right: isMobile ? 90 : 150 } }, interaction: { mode: 'index', intersect: false },
                 plugins: { legend: { align: isMobile ? 'start' : 'center', position: 'top', labels: { boxWidth: isMobile ? 12 : 40, padding: 10 } }, datalabels: { align: 'right', anchor: 'end', offset: 5, backgroundColor: 'white', borderColor: (ctx) => ctx.dataset.borderColor, borderWidth: 1, borderRadius: 4, padding: isMobile ? 4 : 6, color: 'black', font: { weight: 'bold', size: isMobile ? 9 : 10 }, formatter: (val, ctx) => (ctx.dataIndex === ctx.dataset.data.length - 1 && val > 500) ? ctx.dataset.label + '\n' + fmtMoneySimple(val) : null, display: (ctx) => ctx.dataIndex === ctx.dataset.data.length - 1 } },
                 scales: { y: { beginAtZero: true, stacked: true } }
@@ -2277,7 +2148,7 @@
                 }] 
             },
             options: { 
-                animation: isSilent ? false : {}, // Disable animation if silent update
+                animation: isSilent ? false : {}, 
                 responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { grid: { color: '#f0f0f0' } }, x: { grid: { display: false } } } 
             }
         });
@@ -2312,13 +2183,11 @@
             historyBody.appendChild(tr);
         }
         
-        // Ensure charts respect current theme (important for initial load/refresh)
         updateChartStyles();
     }
 
-    // --- TRADINGVIEW WIDGET (Dynamic) ---
     function initTradingView(theme) {
-        document.getElementById('tv-widget-container').innerHTML = ''; // Clear existing
+        document.getElementById('tv-widget-container').innerHTML = ''; 
         new TradingView.widget({
             "container_id": "tv-widget-container",
             "autosize": true,
@@ -2332,9 +2201,9 @@
             "enable_publishing": false,
             "allow_symbol_change": true,
             "save_image": false,
-            "details": true,     // Ensure this is true
-            "hotlist": true,     // Enable this (was false)
-            "calendar": true,    // Enable this (was false)
+            "details": true,     
+            "hotlist": true,     
+            "calendar": true,    
             "show_popup_button": true,
             "popup_width": "1000",
             "popup_height": "650",
@@ -2343,7 +2212,7 @@
     }
 
     initDashboard();
-    initTradingView('dark'); // Changed default to dark
+    initTradingView('dark'); 
 
 </script>
 </body>
