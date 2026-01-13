@@ -386,14 +386,14 @@
             /* Position Below */
             bottom: auto;
             top: 25px; 
-            left: 50%;
+            left: 0;
             
             /* MATCHING CHART STYLE: Font, Rotation, Origin */
             font-family: var(--font-main);
             
             /* OVERRIDE LIBRARY TRANSFORM */
-            /* Pivot at top-left to hang from the handle center */
-            transform: rotate(45deg) !important;
+            /* -45deg aligns with X-axis */
+            transform: rotate(-45deg) !important;
             transform-origin: left top !important;
             
             text-align: left;
@@ -2070,6 +2070,17 @@
     }
 
     function processAndRender(accounts, isSilent = false) {
+        // 1. CAPTURE SLIDER STATE BEFORE DESTROYING ANYTHING
+        let savedSliderState = null;
+        const sliderEl = document.getElementById('balanceSlider');
+        if(sliderEl && sliderEl.noUiSlider) {
+            savedSliderState = sliderEl.noUiSlider.get();
+            // Convert strings to floats if necessary (noUiSlider returns strings)
+            if(Array.isArray(savedSliderState)) {
+                savedSliderState = savedSliderState.map(parseFloat);
+            }
+        }
+
         const allMonths = new Set();
         accounts.forEach(acc => acc.data.forEach(d => allMonths.add(d.key)));
         const sortedMonths = Array.from(allMonths).sort();
@@ -2237,6 +2248,7 @@
                 slider.noUiSlider.destroy();
             }
 
+            // 2. RE-INITIALIZE SLIDER
             noUiSlider.create(slider, {
                 start: [0, sortedMonths.length - 1], 
                 connect: true,
@@ -2250,6 +2262,21 @@
                     from: (val) => val
                 }
             });
+
+            // 3. RESTORE SLIDER STATE (IF SAVED)
+            if(savedSliderState) {
+                // Ensure values stay within the new valid range (0 to sortedMonths.length-1)
+                const newMax = sortedMonths.length - 1;
+                let restoredStart = Math.min(Math.max(0, savedSliderState[0]), newMax);
+                let restoredEnd = Math.min(Math.max(0, savedSliderState[1]), newMax);
+                
+                // Set the slider back to where the user had it
+                slider.noUiSlider.set([restoredStart, restoredEnd]);
+                
+                // Immediately apply to chart so there's no visual "jump" back to default
+                charts.balance.options.scales.x.min = sortedMonths[Math.round(restoredStart)];
+                charts.balance.options.scales.x.max = sortedMonths[Math.round(restoredEnd)];
+            }
 
             slider.noUiSlider.on('update', function (values, handle) {
                 const minIdx = Math.round(values[0]);
