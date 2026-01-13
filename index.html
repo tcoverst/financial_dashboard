@@ -426,7 +426,7 @@
 
     <div class="card">
         <div style="display:flex; justify-content:space-between; align-items:center;">
-             <h3>Yearly Performance Analysis</h3>
+             <h3>Yearly Performance Analysis (TWR)</h3>
              <div style="text-align:right;">
                  <div style="font-size:0.7em; color:#7f8c8d; text-transform:uppercase;">Overall Average</div>
                  <div style="font-size:1.2em; font-weight:bold; color:var(--primary);" id="stat-avg-yearly-return">-</div>
@@ -1939,8 +1939,9 @@
         
         accounts.forEach(acc => alignedData[acc.id] = []);
         
-        // --- YEARLY DATA AGGREGATION SETUP ---
-        const yearlyMap = new Map();
+        // --- YEARLY DATA (TWR) AGGREGATION SETUP ---
+        // We will compute Linked Monthly Returns: Product(1 + Rm) - 1
+        const yearlyTwr = new Map();
 
         sortedMonths.forEach((monthKey, i) => {
             let monthBalance = 0, monthGain = 0, monthIncome = 0, monthDeposits = 0, monthCumulative = 0;
@@ -1965,33 +1966,48 @@
             globalTotals.deposits.push(monthDeposits);
             globalTotals.cumulative.push(monthCumulative);
             
-            // --- YEARLY LOGIC ---
-            const y = monthKey.split('-')[0];
-            if(!yearlyMap.has(y)) {
-                yearlyMap.set(y, { 
-                    gain: 0, 
-                    netDep: 0,
-                    // Estimate start balance of year based on current month stats if first entry, else use previous month
-                    startBal: (i > 0) ? globalTotals.balance[i-1] : (monthBalance - monthGain - monthDeposits)
-                });
+            // --- HIGH ACCURACY MONTHLY RETURN CALCULATION ---
+            const year = monthKey.split('-')[0];
+            if(!yearlyTwr.has(year)) {
+                yearlyTwr.set(year, 1.0); 
             }
-            const yData = yearlyMap.get(y);
-            yData.gain += monthGain;
-            yData.netDep += monthDeposits; // Using Net Deposits for Modified Dietz approximation
+            
+            // Determine Start Balance for this Month
+            // If i=0, we assume start balance was (End - Gain - NetTransfers)
+            // Otherwise, start balance is previous month's end balance
+            let startBal = (i === 0) ? (monthBalance - monthGain - monthDeposits) : globalTotals.balance[i-1];
+            
+            // Handle edge case where account is empty/just started
+            if (startBal < 0) startBal = 0; 
+
+            // Modified Dietz for Monthly Period:
+            // Numerator: Gain (Market Gain + Income)
+            // Denominator: Start Balance + 0.5 * External Flows (Deposits)
+            // Note: 'monthDeposits' here is Net Transfers. 
+            let denominator = startBal + (0.5 * monthDeposits);
+            
+            let monthlyReturn = 0;
+            if (denominator > 0) {
+                monthlyReturn = monthGain / denominator;
+            } else if (monthGain !== 0) {
+                 // Edge case: gain with 0 denominator (e.g. infinite return on 0 base)
+                 // We cap or ignore to prevent chart explosion, or treat as pure gain if start is 0
+                 monthlyReturn = 0; 
+            }
+            
+            // Link Geometrically
+            let currentTwr = yearlyTwr.get(year);
+            yearlyTwr.set(year, currentTwr * (1 + monthlyReturn));
         });
         
-        // --- YEARLY CHART CALCULATIONS ---
-        const yearlyLabels = Array.from(yearlyMap.keys());
+        // --- YEARLY CHART DATA ---
+        const yearlyLabels = Array.from(yearlyTwr.keys());
         const yearlyReturns = [];
         let sumPct = 0;
         
         yearlyLabels.forEach(y => {
-            const d = yearlyMap.get(y);
-            // Modified Dietz Approximation: Gain / (StartBal + 0.5 * NetInflow)
-            let denominator = d.startBal + (0.5 * d.netDep);
-            if(denominator <= 0) denominator = 1; 
-            
-            const pct = (d.gain / denominator) * 100;
+            const val = yearlyTwr.get(y);
+            const pct = (val - 1) * 100; // Convert (1.15) -> 15%
             yearlyReturns.push(pct);
             sumPct += pct;
         });
@@ -2256,16 +2272,16 @@
                         anchor: 'end', 
                         align: 'end', 
                         offset: -5,
-                        font: { weight: 'bold' },
+                        font: { weight: 'bold', size: 9 }, // UPDATED FONT SIZE
                         formatter: (val) => val.toFixed(1) + '%'
                     }
                 }, 
                 scales: { 
                     y: { 
                         grid: { color: '#f0f0f0' },
-                        ticks: { callback: (val) => val + '%' }
+                        ticks: { callback: (val) => val + '%', font: { size: 9 } }
                     }, 
-                    x: { grid: { display: false } } 
+                    x: { grid: { display: false }, ticks: { font: { size: 9 } } } 
                 } 
             }
         });
