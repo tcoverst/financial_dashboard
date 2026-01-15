@@ -225,6 +225,12 @@
         .watchlist-input { padding: 6px 10px; background: var(--bg); border: 1px solid var(--border-color); color: var(--text); border-radius: 4px; }
         .btn-small { padding: 6px 12px; font-size: 0.8em; border: 1px solid var(--border-color); background: var(--card-bg); color: var(--text); cursor: pointer; border-radius: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
         .btn-small:hover { background: var(--primary); color: var(--bg); }
+        .btn-active { background: var(--goal) !important; color: white !important; border-color: var(--goal) !important; }
+
+        .watchlist-split { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        .watchlist-col h4 { margin: 0 0 10px 0; font-size: 0.9em; text-transform: uppercase; letter-spacing: 1px; border-bottom: 2px solid; padding-bottom: 5px; }
+        .watchlist-col.gainers h4 { color: var(--success); border-color: var(--success); }
+        .watchlist-col.losers h4 { color: var(--danger); border-color: var(--danger); }
 
         /* =========================================
            SLIDER CUSTOMIZATION (UPDATED)
@@ -294,6 +300,7 @@
             .table-responsive { display: block; width: 100%; overflow-x: auto; }
             select#extrapolationRateSelect { max-width: 100%; font-size: 0.8em; }
             .breakdown-grid { grid-template-columns: 1fr; }
+            .watchlist-split { grid-template-columns: 1fr; }
         }
     </style>
 </head>
@@ -362,26 +369,48 @@
     <div class="charts-row">
         <div class="card">
             <h3>Live Market Watch</h3>
-            <div class="subtitle" style="margin-bottom:15px">Best performing stocks for the day (Sorted)</div>
+            <div class="subtitle" style="margin-bottom:15px">Sorted by Day Change</div>
             
             <div class="watchlist-controls">
                 <input type="text" id="new-ticker-input" class="watchlist-input" placeholder="Symbol (e.g. NVDA)">
                 <button class="btn-small" onclick="addTickerFromInput()"><i class="fas fa-plus"></i> Add</button>
-                <button class="btn-small" onclick="addRedditTrending()" style="color:var(--goal); border-color:var(--goal)"><i class="fas fa-rocket"></i> Trending (Reddit)</button>
+                <button class="btn-small" id="trending-btn" onclick="toggleRedditTrending()" style="color:var(--goal); border-color:var(--goal)"><i class="fas fa-rocket"></i> Trending (Reddit)</button>
             </div>
 
-            <div class="table-responsive" style="max-height: 400px;">
-                <table class="table-compact">
-                    <thead>
-                        <tr>
-                            <th style="text-align:left">Ticker</th>
-                            <th style="text-align:right">Price</th>
-                            <th style="text-align:right">% Day Change</th>
-                            <th style="text-align:center">Action</th>
-                        </tr>
-                    </thead>
-                    <tbody id="watchlist-body"></tbody>
-                </table>
+            <div class="watchlist-split">
+                <div class="watchlist-col gainers">
+                    <h4>Top Gainers</h4>
+                    <div class="table-responsive" style="max-height: 400px;">
+                        <table class="table-compact">
+                            <thead>
+                                <tr>
+                                    <th style="text-align:left">Ticker</th>
+                                    <th style="text-align:right">Price</th>
+                                    <th style="text-align:right">% Day</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody id="watchlist-gainers-body"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="watchlist-col losers">
+                    <h4>Top Losers</h4>
+                    <div class="table-responsive" style="max-height: 400px;">
+                        <table class="table-compact">
+                            <thead>
+                                <tr>
+                                    <th style="text-align:left">Ticker</th>
+                                    <th style="text-align:right">Price</th>
+                                    <th style="text-align:right">% Day</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody id="watchlist-losers-body"></tbody>
+                        </table>
+                    </div>
+                </div>
             </div>
         </div>
         
@@ -819,6 +848,9 @@
     let userWatchlist = JSON.parse(localStorage.getItem('userWatchlist')) || ['VIGIX', 'VTSAX', 'GOOGL', 'TSLA', 'NVDA', 'BND'];
     let accountOverrides = JSON.parse(localStorage.getItem('accountOverrides')) || {};
 
+    // TRENDING CONSTANTS
+    const redditTrending = ['NVDA', 'TSLA', 'PLTR', 'GME', 'AMD', 'AAPL', 'MSFT', 'AMZN', 'COIN', 'MSTR'];
+
     function toggleTheme() {
         isSciFiMode = !isSciFiMode;
         document.body.classList.toggle('sci-fi-mode');
@@ -827,7 +859,7 @@
         if(globalAccountsData && globalAccountsData.length > 0) {
             processAndRender(globalAccountsData, true);
         }
-        renderWatchlistTable();
+        renderWatchlistColumns();
         
         setTimeout(measurePlaceholder, 300);
     }
@@ -971,24 +1003,39 @@
     function removeTicker(ticker) {
         userWatchlist = userWatchlist.filter(t => t !== ticker);
         localStorage.setItem('userWatchlist', JSON.stringify(userWatchlist));
-        renderWatchlistTable();
+        updateTrendingButtonState();
+        manualRefresh(); 
     }
     
-    function addRedditTrending() {
-        const redditTrending = ['NVDA', 'TSLA', 'PLTR', 'GME', 'AMD', 'AAPL', 'MSFT', 'AMZN', 'COIN', 'MSTR'];
-        let added = 0;
-        redditTrending.forEach(t => {
-            if(!userWatchlist.includes(t)) {
-                userWatchlist.push(t);
-                added++;
-            }
-        });
-        if(added > 0) {
-            localStorage.setItem('userWatchlist', JSON.stringify(userWatchlist));
-            manualRefresh();
+    function updateTrendingButtonState() {
+        // Check if any trending stocks are present
+        const hasTrending = redditTrending.some(t => userWatchlist.includes(t));
+        const btn = document.getElementById('trending-btn');
+        if(hasTrending) {
+             btn.innerHTML = '<i class="fas fa-trash-alt"></i> Remove Trending';
+             btn.classList.add('btn-active');
         } else {
-            alert("Trending stocks are already in your watchlist!");
+             btn.innerHTML = '<i class="fas fa-rocket"></i> Trending (Reddit)';
+             btn.classList.remove('btn-active');
         }
+    }
+    
+    function toggleRedditTrending() {
+        const hasTrending = redditTrending.some(t => userWatchlist.includes(t));
+        
+        if (hasTrending) {
+            // Remove all reddit trending stocks
+            userWatchlist = userWatchlist.filter(t => !redditTrending.includes(t));
+        } else {
+            // Add them
+            redditTrending.forEach(t => {
+                if(!userWatchlist.includes(t)) userWatchlist.push(t);
+            });
+        }
+        
+        localStorage.setItem('userWatchlist', JSON.stringify(userWatchlist));
+        updateTrendingButtonState();
+        manualRefresh();
     }
     
     function initPortfolioConfig() {
@@ -1012,6 +1059,8 @@
                  document.getElementById('config-qty').value = '';
              }
         });
+        
+        updateTrendingButtonState();
     }
     
     function saveAccountOverride() {
@@ -1028,8 +1077,6 @@
             // Apply immediately to global data
             const acc = globalAccountsData.find(a => a.id === accId);
             if(acc) {
-                // Update historical if you want, but mainly we just update the latest live entry or display logic
-                // For simplicity, we trigger a re-render which uses overrides in the render function
                 processAndRender(globalAccountsData, true);
                 alert("Saved! Dashboard updated.");
             }
@@ -1048,7 +1095,7 @@
     }
 
     // ==========================================
-    // LOGIC: REAL-TIME MARKET DATA
+    // LOGIC: REAL-TIME MARKET DATA (UPDATED)
     // ==========================================
 
     async function getMonthToDatePerformance(ticker) {
@@ -1063,8 +1110,7 @@
 
         const cacheBuster = `&_=${new Date().getTime()}`;
         
-        // We fetch 1 day range for watchlist day performance, 3mo range for account MTD performance
-        // Combining logic: Fetch 5d range, enough to get yesterday close and today
+        // Use range=3mo to get Month performance, and verify last two closes for Day Performance
         const targetUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${cleanTicker}?range=3mo&interval=1d${cacheBuster}`;
 
         for (const proxy of proxies) {
@@ -1083,10 +1129,15 @@
 
                 if (!closes || closes.length === 0) continue;
                 
-                // DATA POINT 1: Current Price
+                // DATA POINT 1: Current Price (Last valid close)
                 let currentPrice = null;
+                let lastIndex = -1;
                 for (let i = closes.length - 1; i >= 0; i--) {
-                    if (closes[i] !== null) { currentPrice = closes[i]; break; }
+                    if (closes[i] !== null) { 
+                        currentPrice = closes[i]; 
+                        lastIndex = i;
+                        break; 
+                    }
                 }
 
                 // DATA POINT 2: Month Start Price (for Account MTD)
@@ -1099,10 +1150,22 @@
                     }
                 }
                 
-                // DATA POINT 3: Previous Day Close (For Watchlist Day G/L)
-                let prevClose = quote.meta.chartPreviousClose; 
-                // Fallback if null
-                if(!prevClose) prevClose = baselinePrice; 
+                // DATA POINT 3: STRICT Previous Day Close (For Watchlist Day G/L)
+                // We use the second to last VALID close from the array to ensure we aren't using meta data which might be mismatched
+                let prevClose = null;
+                if (lastIndex > 0) {
+                     // Find the valid close before the current one
+                     for (let j = lastIndex - 1; j >= 0; j--) {
+                         if (closes[j] !== null) {
+                             prevClose = closes[j];
+                             break;
+                         }
+                     }
+                }
+                
+                // Fallback to meta if array scan fails (unlikely)
+                if(!prevClose) prevClose = quote.meta.chartPreviousClose;
+                if(!prevClose) prevClose = baselinePrice; // Final fallback
 
                 const lastTimestamp = timestamps[timestamps.length - 1];
 
@@ -1159,7 +1222,7 @@
                       watchlistDataStore.push({ ticker: ticker, price: 0, dayChange: 0, error: true });
                  }
              }));
-             renderWatchlistTable();
+             renderWatchlistColumns();
         } catch(e) { console.error("Watchlist Error", e); }
 
 
@@ -1230,10 +1293,7 @@
                     liveEntry.timestamp = marketData.ts;
                     // IF OVERRIDE QTY EXISTS, RECALCULATE BALANCE BASED ON PRICE * QTY
                     if(override && override.qty) {
-                         // Balance = Price * Qty + Pending Cash (Deposits not yet invested?)
-                         // Simplification: Balance is just Price * Qty for live tracking
                          liveEntry.balance = marketData.price * override.qty;
-                         // Adjust gain based on this new balance (NewBalance - NetDeposits - StartBalance)
                          liveEntry.marketGain = liveEntry.balance - liveEntry.deposits - liveEntry.income - baselineEntry.balance; 
                          liveEntry.cumulative = baselineEntry.cumulative + liveEntry.marketGain + liveEntry.income; // Approx
                     }
@@ -1251,32 +1311,36 @@
         }
     }
     
-    function renderWatchlistTable() {
-        // Sort: Best to Worst
-        watchlistDataStore.sort((a,b) => b.dayChange - a.dayChange);
-        
-        const body = document.getElementById('watchlist-body');
-        body.innerHTML = '';
-        
-        watchlistDataStore.forEach(item => {
-            const tr = document.createElement('tr');
-            
-            const colorClass = item.dayChange >= 0 ? 'text-green' : 'text-red';
-            const sign = item.dayChange >= 0 ? '+' : '';
-            const pct = (item.dayChange * 100).toFixed(2) + '%';
-            
-            tr.innerHTML = `
-                <td style="font-weight:bold">${item.ticker}</td>
-                <td>${fmtMoney(item.price)}</td>
-                <td class="${colorClass}">${sign}${pct}</td>
-                <td style="text-align:center">
-                    <button onclick="removeTicker('${item.ticker}')" style="background:transparent; border:none; color:var(--danger); cursor:pointer;">
-                        <i class="fas fa-trash"></i>
-                    </button>
-                </td>
-            `;
-            body.appendChild(tr);
-        });
+    function renderWatchlistColumns() {
+        // Filter into two arrays
+        const gainers = watchlistDataStore.filter(i => i.dayChange >= 0).sort((a,b) => b.dayChange - a.dayChange);
+        const losers = watchlistDataStore.filter(i => i.dayChange < 0).sort((a,b) => a.dayChange - b.dayChange); // Worst first
+
+        const fillBody = (items, bodyId) => {
+            const body = document.getElementById(bodyId);
+            body.innerHTML = '';
+            items.forEach(item => {
+                const tr = document.createElement('tr');
+                const colorClass = item.dayChange >= 0 ? 'text-green' : 'text-red';
+                const sign = item.dayChange >= 0 ? '+' : '';
+                const pct = (item.dayChange * 100).toFixed(2) + '%';
+                
+                tr.innerHTML = `
+                    <td style="font-weight:bold">${item.ticker}</td>
+                    <td>${fmtMoney(item.price)}</td>
+                    <td class="${colorClass}">${sign}${pct}</td>
+                    <td style="text-align:center">
+                        <button onclick="removeTicker('${item.ticker}')" style="background:transparent; border:none; color:var(--text); opacity:0.5; cursor:pointer;" title="Remove">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </td>
+                `;
+                body.appendChild(tr);
+            });
+        };
+
+        fillBody(gainers, 'watchlist-gainers-body');
+        fillBody(losers, 'watchlist-losers-body');
     }
     
     async function manualRefresh() {
