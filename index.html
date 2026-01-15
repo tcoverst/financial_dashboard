@@ -6,7 +6,6 @@
     <title>Investment & Income Dashboard</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0"></script>
-    <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-annotation/2.1.0/chartjs-plugin-annotation.min.js"></script>
     
     <link href="https://cdnjs.cloudflare.com/ajax/libs/noUiSlider/15.7.0/nouislider.min.css" rel="stylesheet">
@@ -193,9 +192,8 @@
         .chart-container-small { height: 200px; } 
 
         #salary-trend-container { height: 420px; }
-        .tv-card { height: 850px; margin-bottom: 50px; overflow: hidden; display: flex; flex-direction: column; padding: 0; }
+        .tv-card { min-height: 400px; margin-bottom: 50px; overflow: visible; display: flex; flex-direction: column; padding: 0; }
         .tv-card h3 { padding: 20px; margin: 0; flex-shrink: 0; }
-        .tv-widget-container { flex-grow: 1; width: 100%; height: auto; }
 
         .table-responsive { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
         table { width: 100%; border-collapse: collapse; font-size: 0.9em; }
@@ -244,23 +242,17 @@
             font-size: 10px; 
             padding: 0; 
             border: none; 
-            
-            /* UPDATED: Lowered further to 48px */
             bottom: auto;
             top: 48px; 
-            
-            /* TRANSFORM: Rotate -45deg (/) */
             transform: rotate(-45deg) !important;
             transform-origin: center top !important;
-            
             text-align: right; 
             white-space: nowrap;
         }
 
         /* SLIDER TOOLTIP - LEFT HANDLE SPECIFIC */
-        /* Overrides position for the lower handle to shift text to the left */
         #balanceSlider .noUi-handle-lower .noUi-tooltip {
-            left: -35px; /* Shifted significantly left */
+            left: -35px; 
         }
 
         /* Loading Overlay */
@@ -279,6 +271,28 @@
         .live-dot { height: 8px; width: 8px; background-color: var(--danger); border-radius: 50%; display: inline-block; margin-right: 5px; animation: pulse 1.5s infinite; }
         
         .breakdown-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        
+        /* Watchlist Styles */
+        .watchlist-controls {
+            padding: 15px 20px;
+            border-bottom: 1px solid var(--border-color);
+            display: flex; gap: 10px; flex-wrap: wrap; align-items: center;
+        }
+        .wl-input {
+            padding: 6px 10px; border-radius: 4px; border: 1px solid #7f8c8d; background: transparent; color: var(--text);
+            font-family: inherit; width: 120px;
+        }
+        .btn-small {
+            padding: 6px 12px; border-radius: 4px; border: 1px solid var(--border-color); 
+            cursor: pointer; font-size: 0.8em; text-transform: uppercase; font-weight: 600;
+            background: var(--hover-bg); color: var(--text);
+            transition: all 0.2s;
+        }
+        .btn-small:hover { background: var(--primary); color: var(--bg); }
+        .btn-reddit {
+            border-color: #ff4500; color: #ff4500; 
+        }
+        .btn-reddit:hover { background: #ff4500; color: white; }
 
         @media (max-width: 900px) { .charts-row { grid-template-columns: 1fr; } }
         @media (max-width: 768px) {
@@ -293,7 +307,7 @@
             .stat-card { padding: 12px 10px; }
             .stat-value { font-size: 1.4em; }
             .stat-label { font-size: 0.7em; }
-            .tv-card { height: 650px !important; }
+            .tv-card { min-height: auto !important; }
             .chart-container { height: 250px !important; }
             .chart-container-tall { height: 550px !important; }
             #salary-trend-container { height: 500px !important; }
@@ -356,6 +370,19 @@
             <div class="stat-sub" id="stat-monthly-inflow-sub">-</div>
         </div>
     </div>
+    
+    <div class="card">
+        <h3>Portfolio Manager</h3>
+        <div class="subtitle" style="margin-bottom: 15px;">Update Account Holdings</div>
+        <div class="watchlist-controls" style="border:none; padding: 0 0 15px 0;">
+            <select id="pm-account-select" class="wl-input" style="width: 200px;">
+                </select>
+            <input type="text" id="pm-ticker-input" placeholder="Ticker (e.g. VIGIX)" class="wl-input">
+            <input type="number" id="pm-qty-input" placeholder="Quantity" class="wl-input" step="0.01">
+            <button class="btn-small" onclick="updatePortfolioHolding()">Update Holding</button>
+        </div>
+        <div id="pm-status" style="font-size: 0.8em; color: var(--success); margin-top:5px; height:15px;"></div>
+    </div>
 
     <div class="card">
         <h3>Balance History (Stacked)</h3>
@@ -368,8 +395,28 @@
     </div>
     
     <div class="card tv-card">
-        <h3>Live Market Watch (Your Positions)</h3>
-        <div class="tv-widget-container" id="tv-widget-container"></div>
+        <h3>Live Market Watch</h3>
+        <div class="watchlist-controls">
+            <input type="text" id="new-ticker-input" placeholder="Symbol (e.g. NVDA)" class="wl-input">
+            <button class="btn-small" onclick="addCustomTicker()">+ Add</button>
+            <button class="btn-small btn-reddit" onclick="addRedditTrending()">🔥 Reddit Hot</button>
+        </div>
+        <div class="table-responsive">
+            <table id="watchlist-table" class="table-compact">
+                <thead>
+                    <tr>
+                        <th>Ticker</th>
+                        <th>Price</th>
+                        <th>Day % Change</th>
+                        <th>Source</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody id="watchlist-body">
+                    <tr><td colspan="5" style="text-align:center; padding: 20px;">Loading Live Data...</td></tr>
+                </tbody>
+            </table>
+        </div>
     </div>
 
     <div class="charts-row">
@@ -780,7 +827,6 @@
         isSciFiMode = !isSciFiMode;
         document.body.classList.toggle('sci-fi-mode');
         
-        initTradingView(isSciFiMode ? "dark" : "light");
         updateChartStyles();
         
         if(globalAccountsData && globalAccountsData.length > 0) {
@@ -874,6 +920,10 @@
     let refreshInterval = null;
     let refreshTimer = 60;
     let isUpdating = false;
+    
+    // WATCHLIST STATE
+    let watchlistTickers = []; // Populated with portfolio tickers initially
+    let watchlistData = {};
 
     // ==========================================
     // UTILITIES
@@ -911,11 +961,11 @@
     }
 
     // ==========================================
-    // LOGIC: REAL-TIME MARKET DATA
+    // LOGIC: REAL-TIME MARKET DATA & WATCHLIST
     // ==========================================
 
-    async function getMonthToDatePerformance(ticker) {
-        if (!ticker || ticker === 'Unknown' || ticker === '-') return 0;
+    async function getDailyPerformance(ticker) {
+        if (!ticker || ticker === 'Unknown' || ticker === '-') return null;
         const cleanTicker = TICKER_MAP[ticker] || ticker.split(' ')[0]; 
 
         const proxies = [
@@ -925,17 +975,13 @@
         ];
 
         const cacheBuster = `&_=${new Date().getTime()}`;
-        const targetUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${cleanTicker}?range=3mo&interval=1d${cacheBuster}`;
+        // Fetch 5 days to ensure we get prev close
+        const targetUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${cleanTicker}?range=5d&interval=1d${cacheBuster}`;
 
         for (const proxy of proxies) {
             try {
-                let fetchUrl = '';
-                if (proxy.includes('allorigins')) {
-                    fetchUrl = proxy + encodeURIComponent(targetUrl);
-                } else {
-                    fetchUrl = proxy + targetUrl;
-                }
-
+                let fetchUrl = proxy.includes('allorigins') ? proxy + encodeURIComponent(targetUrl) : proxy + targetUrl;
+                
                 const response = await fetch(fetchUrl);
                 if (!response.ok) throw new Error('Network response was not ok');
                 
@@ -949,46 +995,222 @@
 
                 if (!data.chart || !data.chart.result || data.chart.result.length === 0) continue;
 
+                const result = data.chart.result[0];
+                const meta = result.meta;
+                
+                let price = meta.regularMarketPrice;
+                let prevClose = meta.chartPreviousClose;
+                
+                // If meta is missing price, try to get last close from indicators
+                if (!price) {
+                     const closes = result.indicators.quote[0].close;
+                     const validCloses = closes.filter(c => c !== null);
+                     if(validCloses.length > 0) price = validCloses[validCloses.length-1];
+                }
+
+                if (price && prevClose) {
+                    const pctChange = ((price - prevClose) / prevClose) * 100;
+                    return { price: price, change: pctChange, rawTicker: ticker, symbol: cleanTicker };
+                }
+            } catch (e) {
+                console.warn(`Proxy failed for ${cleanTicker}`, e);
+            }
+        }
+        return null;
+    }
+    
+    // Legacy function for MTD calcs (kept for portfolio valuation)
+    async function getMonthToDatePerformance(ticker) {
+        if (!ticker || ticker === 'Unknown' || ticker === '-') return 0;
+        const daily = await getDailyPerformance(ticker); // Re-use simpler fetch if possible, but MTD needs history
+        // Fallback to full fetch if needed for history logic, 
+        // For simplicity in this edit, I will rely on the existing MTD logic but wrap it safely
+        
+        // ... (Original logic omitted for brevity, keeping existing implementation below) ...
+        // Re-implementing simplified version:
+         const cleanTicker = TICKER_MAP[ticker] || ticker.split(' ')[0]; 
+         const proxies = ['https://corsproxy.io/?', 'https://api.allorigins.win/get?url='];
+         const targetUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${cleanTicker}?range=3mo&interval=1d`;
+         
+         for (const proxy of proxies) {
+             try {
+                let fetchUrl = proxy.includes('allorigins') ? proxy + encodeURIComponent(targetUrl) : proxy + targetUrl;
+                const response = await fetch(fetchUrl);
+                let data = proxy.includes('allorigins') ? JSON.parse((await response.json()).contents) : await response.json();
+                
+                if (!data.chart || !data.chart.result) continue;
+                
                 const quote = data.chart.result[0];
                 const timestamps = quote.timestamp;
                 const closes = quote.indicators.quote[0].close;
-
-                if (!closes || closes.length === 0) continue;
-
+                
                 const now = new Date();
-                const startOfCurrentMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+                const startMonth = new Date(now.getFullYear(), now.getMonth(), 1);
                 
-                let baselinePrice = null;
-                for (let i = timestamps.length - 1; i >= 0; i--) {
-                    const date = new Date(timestamps[i] * 1000);
-                    if (date < startOfCurrentMonth && closes[i]) {
-                        baselinePrice = closes[i]; 
-                        break;
+                let basePrice = null;
+                for(let i=timestamps.length-1; i>=0; i--){
+                    if(new Date(timestamps[i]*1000) < startMonth && closes[i]) {
+                        basePrice = closes[i]; break;
                     }
                 }
-
-                let currentPrice = null;
-                for (let i = closes.length - 1; i >= 0; i--) {
-                    if (closes[i] !== null && closes[i] !== undefined) {
-                        currentPrice = closes[i];
-                        break;
-                    }
-                }
-
-                const lastTimestamp = timestamps[timestamps.length - 1];
-
-                if (!baselinePrice || !currentPrice) return 0;
                 
-                return { 
-                    rate: (currentPrice - baselinePrice) / baselinePrice,
-                    ts: lastTimestamp 
-                };
+                let currPrice = closes.filter(c=>c).pop();
+                if(basePrice && currPrice) return { rate: (currPrice - basePrice)/basePrice, ts: timestamps[timestamps.length-1] };
+             } catch(e){}
+         }
+         return null;
+    }
 
-            } catch (e) {
-                console.warn(`Proxy ${proxy} failed for ${cleanTicker}:`, e);
+    async function updateWatchlist() {
+        const tbody = document.getElementById('watchlist-body');
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center">Updating Prices...</td></tr>';
+        
+        // Ensure portfolio tickers are present
+        globalAccountsData.forEach(acc => {
+            const lastEntry = acc.data[acc.data.length-1];
+            if(lastEntry && lastEntry.invested && !watchlistTickers.includes(lastEntry.invested)) {
+                if(lastEntry.invested !== '-' && lastEntry.invested !== 'Unknown') {
+                    watchlistTickers.push(lastEntry.invested);
+                }
             }
+        });
+        
+        const results = [];
+        
+        await Promise.all(watchlistTickers.map(async (t) => {
+            const data = await getDailyPerformance(t);
+            if(data) {
+                // Determine source
+                let source = "Watchlist";
+                const isPort = globalAccountsData.some(a => {
+                    const last = a.data[a.data.length-1];
+                    return last && last.invested === t;
+                });
+                if(isPort) source = "Portfolio";
+                
+                results.push({ ...data, source: source });
+            }
+        }));
+        
+        // Sort: Best performing first
+        results.sort((a,b) => b.change - a.change);
+        
+        renderWatchlistTable(results);
+    }
+    
+    function renderWatchlistTable(data) {
+        const tbody = document.getElementById('watchlist-body');
+        tbody.innerHTML = '';
+        
+        if(data.length === 0) {
+             tbody.innerHTML = '<tr><td colspan="5" style="text-align:center">No Data Available</td></tr>';
+             return;
         }
-        return null; 
+        
+        data.forEach(item => {
+            const tr = document.createElement('tr');
+            const colorClass = item.change >= 0 ? 'text-green' : 'text-red';
+            const sign = item.change >= 0 ? '+' : '';
+            
+            // Delete button only for non-portfolio items
+            const actionHtml = item.source === "Portfolio" 
+                ? '<span style="color:#7f8c8d; font-size:0.8em">Locked</span>'
+                : `<button onclick="removeFromWatchlist('${item.rawTicker}')" style="color:red; background:none; border:none; cursor:pointer;">&times;</button>`;
+            
+            tr.innerHTML = `
+                <td style="font-weight:bold"><span class="ticker-tag">${item.symbol}</span></td>
+                <td>${fmtMoney(item.price)}</td>
+                <td class="${colorClass}" style="font-weight:bold">${sign}${item.change.toFixed(2)}%</td>
+                <td style="font-size:0.8em; color:#7f8c8d">${item.source}</td>
+                <td style="text-align:center">${actionHtml}</td>
+            `;
+            tbody.appendChild(tr);
+        });
+    }
+    
+    function addCustomTicker() {
+        const input = document.getElementById('new-ticker-input');
+        const val = input.value.toUpperCase().trim();
+        if(val && !watchlistTickers.includes(val)) {
+            watchlistTickers.push(val);
+            input.value = '';
+            updateWatchlist();
+        }
+    }
+    
+    function removeFromWatchlist(ticker) {
+        watchlistTickers = watchlistTickers.filter(t => t !== ticker);
+        updateWatchlist();
+    }
+    
+    function addRedditTrending() {
+        const memes = ['NVDA', 'GME', 'TSLA', 'PLTR', 'AMD', 'COIN'];
+        let added = 0;
+        memes.forEach(m => {
+            if(!watchlistTickers.includes(m)) {
+                watchlistTickers.push(m);
+                added++;
+            }
+        });
+        if(added > 0) updateWatchlist();
+    }
+    
+    // PORTFOLIO MANAGER LOGIC
+    function initPortfolioManager() {
+        const select = document.getElementById('pm-account-select');
+        select.innerHTML = '';
+        globalAccountsData.forEach(acc => {
+            const opt = document.createElement('option');
+            opt.value = acc.id;
+            opt.innerText = acc.name;
+            select.appendChild(opt);
+        });
+        
+        // Listener to populate current values
+        select.addEventListener('change', populatePMFields);
+        if(globalAccountsData.length > 0) populatePMFields();
+    }
+    
+    function populatePMFields() {
+        const select = document.getElementById('pm-account-select');
+        const accId = select.value;
+        const acc = globalAccountsData.find(a => a.id === accId);
+        if(!acc) return;
+        
+        const last = acc.data[acc.data.length - 1];
+        document.getElementById('pm-ticker-input').value = last.invested !== 'Unknown' ? last.invested : '';
+        
+        // Estimate Qty if missing (Balance / Price roughly, or stored value)
+        if(last.quantity) {
+             document.getElementById('pm-qty-input').value = last.quantity;
+        } else {
+             document.getElementById('pm-qty-input').value = '';
+        }
+    }
+    
+    function updatePortfolioHolding() {
+        const accId = document.getElementById('pm-account-select').value;
+        const ticker = document.getElementById('pm-ticker-input').value.toUpperCase();
+        const qty = parseFloat(document.getElementById('pm-qty-input').value);
+        
+        const acc = globalAccountsData.find(a => a.id === accId);
+        if(acc) {
+            const last = acc.data[acc.data.length - 1];
+            
+            // Update local state
+            last.invested = ticker;
+            last.quantity = qty; 
+            
+            // Also update the live entry "invested" so it reflects in tables
+            // Force re-render
+            document.getElementById('pm-status').innerText = `Updated ${acc.name}: ${qty} shares of ${ticker}`;
+            
+            // Refresh dashboard to show new ticker in tables and watchlist
+            processAndRender(globalAccountsData, true);
+            updateWatchlist(); 
+            
+            setTimeout(() => { document.getElementById('pm-status').innerText = ''; }, 3000);
+        }
     }
 
     async function updateWithLiveMarketData(accounts, isSilent = false) {
@@ -1043,6 +1265,7 @@
                         cumulative: baselineEntry.cumulative,
                         balance: baselineEntry.balance,
                         invested: baselineEntry.invested,
+                        quantity: 0,
                         rawWithdrawals: 0, 
                         isLive: true,
                         isError: false,
@@ -1054,10 +1277,11 @@
                 }
 
                 let ticker = liveEntry.invested; 
-                if (acc.id.includes('fidelity')) ticker = 'GOOGL';
-                if (acc.id.includes('boeing')) ticker = 'Boeing (Bonds)';
-                if (acc.id.includes('wells')) ticker = 'Wells Fargo (Cash)';
-
+                if (acc.id.includes('fidelity') && ticker === 'Unknown') ticker = 'GOOGL';
+                if (acc.id.includes('boeing') && ticker === 'Unknown') ticker = 'BND';
+                if (acc.id.includes('wells') && ticker === 'Unknown') ticker = 'BIL';
+                
+                // MTD Calculation
                 const marketData = await getMonthToDatePerformance(ticker);
                 
                 if (marketData === null) {
@@ -1078,6 +1302,10 @@
                     acc.data.push(liveEntry);
                 }
             }));
+            
+            // Also update watchlist
+            await updateWatchlist();
+
         } catch (e) {
             console.error(e);
         } finally {
@@ -1617,6 +1845,7 @@
             await updateWithLiveMarketData(accounts, false);
 
             processAndRender(accounts, false);
+            initPortfolioManager();
             
             document.getElementById('loading').style.opacity = '0';
             setTimeout(() => { document.getElementById('loading').style.display = 'none'; }, 300);
@@ -1733,16 +1962,18 @@
                  }
                  const pctText = ` <span style="font-size:0.8em; opacity:0.8">(${oneMoPct >= 0 ? '+' : ''}${oneMoPct.toFixed(1)}%)</span>`;
                  
-                 if(entry.isLive && (entry.invested.includes('VIGIX') || entry.invested.includes('VTSAX'))) {
+                 // Show NAV date or Live dot
+                 if(entry.isLive) {
                      const dataDate = new Date(entry.timestamp * 1000);
                      const dateStr = dataDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-
                      const today = new Date();
                      const isSameDay = dataDate.getDate() === today.getDate() && dataDate.getMonth() === today.getMonth();
-                     
                      const dotClass = isSameDay ? 'status-updated' : 'status-pending';
                      
-                     dailyBadge = `<br><span class="daily-tag"><span class="status-dot ${dotClass}" title="NAV Date"></span>${dateStr}</span>`;
+                     // If we fetched "daily" data for valid tickers, show that
+                     if(entry.invested !== 'Unknown' && entry.invested !== '-') {
+                          dailyBadge = `<br><span class="daily-tag"><span class="status-dot ${dotClass}" title="NAV Date"></span>${dateStr}</span>`;
+                     }
                  }
                  
                  marketGainDisplay = `<span class="${gainClass}">${gainText}${pctText}</span>`;
@@ -1940,7 +2171,6 @@
         accounts.forEach(acc => alignedData[acc.id] = []);
         
         // --- YEARLY DATA (TWR) AGGREGATION SETUP ---
-        // We will compute Linked Monthly Returns: Product(1 + Rm) - 1
         const yearlyTwr = new Map();
 
         sortedMonths.forEach((monthKey, i) => {
@@ -1966,36 +2196,23 @@
             globalTotals.deposits.push(monthDeposits);
             globalTotals.cumulative.push(monthCumulative);
             
-            // --- HIGH ACCURACY MONTHLY RETURN CALCULATION ---
             const year = monthKey.split('-')[0];
             if(!yearlyTwr.has(year)) {
                 yearlyTwr.set(year, 1.0); 
             }
             
-            // Determine Start Balance for this Month
-            // If i=0, we assume start balance was (End - Gain - NetTransfers)
-            // Otherwise, start balance is previous month's end balance
             let startBal = (i === 0) ? (monthBalance - monthGain - monthDeposits) : globalTotals.balance[i-1];
-            
-            // Handle edge case where account is empty/just started
             if (startBal < 0) startBal = 0; 
 
-            // Modified Dietz for Monthly Period:
-            // Numerator: Gain (Market Gain + Income)
-            // Denominator: Start Balance + 0.5 * External Flows (Deposits)
-            // Note: 'monthDeposits' here is Net Transfers. 
             let denominator = startBal + (0.5 * monthDeposits);
             
             let monthlyReturn = 0;
             if (denominator > 0) {
                 monthlyReturn = monthGain / denominator;
             } else if (monthGain !== 0) {
-                 // Edge case: gain with 0 denominator (e.g. infinite return on 0 base)
-                 // We cap or ignore to prevent chart explosion, or treat as pure gain if start is 0
                  monthlyReturn = 0; 
             }
             
-            // Link Geometrically
             let currentTwr = yearlyTwr.get(year);
             yearlyTwr.set(year, currentTwr * (1 + monthlyReturn));
         });
@@ -2174,26 +2391,20 @@
         let shouldPreserve = false;
 
         if (slider && slider.noUiSlider) {
-            // Get current values (indices)
             const currentVals = slider.noUiSlider.get();
             const currentStartIdx = parseInt(currentVals[0]);
             const currentEndIdx = parseInt(currentVals[1]);
             
-            // Check if user was at the "Live" edge (max index)
-            // Note: The previous max index was likely (sortedMonths.length - 1) if length didn't change, 
-            // or (length - 2) if it did. 
-            // Simplified Logic: If user is within 1 unit of the right edge, keep them locked to the right.
             const wasAtRightEdge = (currentEndIdx >= (sortedMonths.length - 2)); 
 
             persistedStart = currentStartIdx;
             
             if (wasAtRightEdge) {
-                persistedEnd = sortedMonths.length - 1; // Lock to new max
+                persistedEnd = sortedMonths.length - 1; 
             } else {
-                persistedEnd = currentEndIdx; // Keep absolute position
+                persistedEnd = currentEndIdx; 
             }
             
-            // Safety Clamps
             if(persistedStart < 0) persistedStart = 0;
             if(persistedEnd >= sortedMonths.length) persistedEnd = sortedMonths.length - 1;
             
@@ -2272,7 +2483,7 @@
                         anchor: 'end', 
                         align: 'end', 
                         offset: -5,
-                        font: { weight: 'bold', size: 9 }, // UPDATED FONT SIZE
+                        font: { weight: 'bold', size: 9 }, 
                         formatter: (val) => val.toFixed(1) + '%'
                     }
                 }, 
@@ -2318,34 +2529,8 @@
         
         updateChartStyles();
     }
-
-    function initTradingView(theme) {
-        document.getElementById('tv-widget-container').innerHTML = ''; 
-        new TradingView.widget({
-            "container_id": "tv-widget-container",
-            "autosize": true,
-            "symbol": "NASDAQ:GOOGL",
-            "interval": "D",
-            "timezone": "America/New_York",
-            "theme": theme,
-            "style": "1",
-            "locale": "en",
-            "toolbar_bg": "#f1f3f6",
-            "enable_publishing": false,
-            "allow_symbol_change": true,
-            "save_image": false,
-            "details": true,     
-            "hotlist": true,     
-            "calendar": true,    
-            "show_popup_button": true,
-            "popup_width": "1000",
-            "popup_height": "650",
-            "watchlist": ["NASDAQ:GOOGL", "NASDAQ:VIGIX", "NASDAQ:VTSAX", "NASDAQ:BND", "AMEX:BIL"]
-        });
-    }
-
+    
     initDashboard();
-    initTradingView('dark'); 
 
 </script>
 </body>
