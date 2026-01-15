@@ -31,6 +31,8 @@
             --text: #2c3e50;
             --accent: #8e44ad;
             --goal: #e67e22;
+            --vested-bg: rgba(241, 196, 15, 0.1);
+            --vested-border: #f39c12;
             --border-color: rgba(0,0,0,0.1);
             --crosshair-color: rgba(0,0,0,0.2);
             --th-bg: rgba(0,0,0,0.03);
@@ -59,6 +61,8 @@
             --text: #ecf0f1;
             --accent: #a29bfe;
             --goal: #fab1a0;
+            --vested-bg: rgba(243, 156, 18, 0.15);
+            --vested-border: #f39c12;
             --border-color: rgba(255,255,255,0.15);
             --crosshair-color: rgba(255,255,255,0.2);
             --th-bg: rgba(255,255,255,0.1);
@@ -208,6 +212,7 @@
         .status-dot { height: 6px; width: 6px; border-radius: 50%; display: inline-block; margin-right: 4px; vertical-align: middle; margin-bottom: 1px; }
         .status-pending { background-color: #f39c12; box-shadow: 0 0 3px #f39c12; }
         .status-updated { background-color: #27ae60; box-shadow: 0 0 3px #27ae60; }
+        .status-working { background-color: #3498db; box-shadow: 0 0 3px #3498db; animation: pulse 1s infinite; }
 
         .account-name { font-weight: 500; display: block; }
         .sub-text { font-size: 0.75em; color: #999; display: block; margin-top: 2px; }
@@ -227,10 +232,8 @@
         .btn-small:hover { background: var(--primary); color: var(--bg); }
         .btn-active { background: var(--goal) !important; color: white !important; border-color: var(--goal) !important; }
 
-        .watchlist-split { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-        .watchlist-col h4 { margin: 0 0 10px 0; font-size: 0.9em; text-transform: uppercase; letter-spacing: 1px; border-bottom: 2px solid; padding-bottom: 5px; }
-        .watchlist-col.gainers h4 { color: var(--success); border-color: var(--success); }
-        .watchlist-col.losers h4 { color: var(--danger); border-color: var(--danger); }
+        .vested-row { background: var(--vested-bg) !important; border-left: 3px solid var(--vested-border) !important; }
+        .vested-badge { font-size: 9px; text-transform: uppercase; background: var(--vested-border); color: #000; padding: 1px 4px; border-radius: 3px; font-weight: bold; margin-left: 5px; vertical-align: middle; }
 
         /* =========================================
            SLIDER CUSTOMIZATION (UPDATED)
@@ -320,7 +323,7 @@
         <button class="refresh-btn" onclick="manualRefresh()" id="manual-refresh-btn" style="margin:0;">
             <span>↻</span> Update
         </button>
-        <div id="refresh-timer" style="font-size: 0.75em; color: #999;">Updates in 1s</div>
+        <div id="refresh-timer" style="font-size: 0.75em; color: #999;">Live</div>
     </div>
 </div>
 
@@ -367,53 +370,44 @@
     </div>
     
     <div class="charts-row">
-        <div class="card">
-            <h3>Live Market Watch</h3>
-            <div class="subtitle" style="margin-bottom:15px">Sorted by Day Change</div>
-            
-            <div class="watchlist-controls">
-                <input type="text" id="new-ticker-input" class="watchlist-input" placeholder="Symbol (e.g. NVDA)">
-                <button class="btn-small" onclick="addTickerFromInput()"><i class="fas fa-plus"></i> Add</button>
-                <button class="btn-small" id="trending-btn" onclick="toggleRedditTrending()" style="color:var(--goal); border-color:var(--goal)"><i class="fas fa-rocket"></i> Trending (Reddit)</button>
+        <div class="card" style="grid-column: span 2; width: 100%;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; flex-wrap:wrap;">
+                <div>
+                    <h3>Live Market Watch</h3>
+                    <div class="subtitle">Real-time Performance & Historical Returns</div>
+                </div>
+                <div class="watchlist-controls" style="margin:0;">
+                    <input type="text" id="new-ticker-input" class="watchlist-input" placeholder="Symbol (e.g. NVDA)">
+                    <button class="btn-small" onclick="addTickerFromInput()"><i class="fas fa-plus"></i> Add</button>
+                    <button class="btn-small" id="trending-btn" onclick="toggleRedditTrending()" style="color:var(--goal); border-color:var(--goal)"><i class="fas fa-rocket"></i> Trending (Reddit)</button>
+                </div>
             </div>
 
-            <div class="watchlist-split">
-                <div class="watchlist-col gainers">
-                    <h4>Top Gainers</h4>
-                    <div class="table-responsive" style="max-height: 400px;">
-                        <table class="table-compact">
-                            <thead>
-                                <tr>
-                                    <th style="text-align:left">Ticker</th>
-                                    <th style="text-align:right">Price</th>
-                                    <th style="text-align:right">% Day</th>
-                                    <th></th>
-                                </tr>
-                            </thead>
-                            <tbody id="watchlist-gainers-body"></tbody>
-                        </table>
-                    </div>
-                </div>
-
-                <div class="watchlist-col losers">
-                    <h4>Top Losers</h4>
-                    <div class="table-responsive" style="max-height: 400px;">
-                        <table class="table-compact">
-                            <thead>
-                                <tr>
-                                    <th style="text-align:left">Ticker</th>
-                                    <th style="text-align:right">Price</th>
-                                    <th style="text-align:right">% Day</th>
-                                    <th></th>
-                                </tr>
-                            </thead>
-                            <tbody id="watchlist-losers-body"></tbody>
-                        </table>
-                    </div>
-                </div>
+            <div class="table-responsive" style="max-height: 600px;">
+                <table class="table-compact" style="font-size: 0.8em;">
+                    <thead>
+                        <tr>
+                            <th style="text-align:left">Ticker</th>
+                            <th style="text-align:right">Price</th>
+                            <th style="text-align:right">% 1D</th>
+                            <th style="text-align:right; opacity:0.8">% 1W</th>
+                            <th style="text-align:right; opacity:0.8">% 1M</th>
+                            <th style="text-align:right; opacity:0.8">% 3M</th>
+                            <th style="text-align:right; opacity:0.8">% 6M</th>
+                            <th style="text-align:right; opacity:0.8">% 1Y</th>
+                            <th style="text-align:right; opacity:0.8">% 3Y</th>
+                            <th style="text-align:right; opacity:0.8">% 5Y</th>
+                            <th style="text-align:right; opacity:0.8">Max</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody id="watchlist-body"></tbody>
+                </table>
             </div>
         </div>
-        
+    </div>
+
+    <div class="charts-row">
         <div class="card">
              <h3>Portfolio Settings</h3>
              <div class="subtitle" style="margin-bottom:15px">Override Holdings (Saved Locally)</div>
@@ -438,50 +432,30 @@
                  <button class="btn-small" onclick="clearAccountOverride()" style="width:100%; text-align:center; margin-top:5px;">Clear Override</button>
              </div>
         </div>
-    </div>
-
-    <div class="charts-row">
-        <div class="card">
-            <h3 id="currentSnapshotHeader">Current Investment Breakdown (Latest Month)</h3>
-            <div class="table-responsive">
-                <table id="snapshotTable" class="table-compact">
-                    <thead>
-                        <tr>
-                            <th>Account</th>
-                            <th>Balance</th>
-                            <th>1-Mo Gain</th>
-                            <th>1-Mo Inflow</th> 
-                            <th>Net Dep</th>
-                            <th>Return</th>
-                            <th>ROI</th> </tr>
-                    </thead>
-                    <tbody id="snapshotBody"></tbody>
-                </table>
-            </div>
-            
-            <h3 id="prevSnapshotHeader" style="margin-top: 30px; border-top: 2px solid var(--border-color); padding-top: 20px;">Previous Month Breakdown</h3>
-            <div class="table-responsive">
-                <table id="prevSnapshotTable" class="table-compact">
-                    <thead>
-                        <tr>
-                            <th>Account</th>
-                            <th>Balance</th>
-                            <th>1-Mo Gain</th>
-                            <th>1-Mo Inflow</th> 
-                            <th>Net Dep</th>
-                            <th>Return</th>
-                            <th>ROI</th> </tr>
-                    </thead>
-                    <tbody id="prevSnapshotBody"></tbody>
-                </table>
-            </div>
-        </div>
-        
-        <div class="card">
+         <div class="card">
             <h3>Asset Allocation</h3>
             <div class="chart-container">
                 <canvas id="allocationChart"></canvas>
             </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <h3 id="currentSnapshotHeader">Current Investment Breakdown (Latest Month)</h3>
+        <div class="table-responsive">
+            <table id="snapshotTable" class="table-compact">
+                <thead>
+                    <tr>
+                        <th>Account</th>
+                        <th>Balance</th>
+                        <th>1-Mo Gain</th>
+                        <th>1-Mo Inflow</th> 
+                        <th>Net Dep</th>
+                        <th>Return</th>
+                        <th>ROI</th> </tr>
+                </thead>
+                <tbody id="snapshotBody"></tbody>
+            </table>
         </div>
     </div>
 
@@ -862,7 +836,7 @@
         if(globalAccountsData && globalAccountsData.length > 0) {
             processAndRender(globalAccountsData, true);
         }
-        renderWatchlistColumns();
+        renderWatchlistTable();
         
         setTimeout(measurePlaceholder, 300);
     }
@@ -948,10 +922,8 @@
     let globalAccountsData = []; 
     let charts = {};
     let watchlistDataStore = [];
-
-    let refreshInterval = null;
-    let refreshTimer = 60;
-    let isUpdating = false;
+    let isAutoRefreshRunning = false;
+    let refreshPaused = false;
 
     // ==========================================
     // UTILITIES
@@ -999,7 +971,10 @@
             userWatchlist.push(ticker);
             localStorage.setItem('userWatchlist', JSON.stringify(userWatchlist));
             input.value = '';
-            manualRefresh(); 
+            // Fetch full history for new item immediately
+            getTickerData(ticker, 'full').then(() => {
+                 manualRefresh();
+            });
         }
     }
     
@@ -1007,11 +982,10 @@
         userWatchlist = userWatchlist.filter(t => t !== ticker);
         localStorage.setItem('userWatchlist', JSON.stringify(userWatchlist));
         updateTrendingButtonState();
-        manualRefresh(); 
+        renderWatchlistTable(); 
     }
     
     function updateTrendingButtonState() {
-        // Check if any trending stocks are present
         const hasTrending = redditTrending.some(t => userWatchlist.includes(t));
         const btn = document.getElementById('trending-btn');
         if(hasTrending) {
@@ -1027,18 +1001,22 @@
         const hasTrending = redditTrending.some(t => userWatchlist.includes(t));
         
         if (hasTrending) {
-            // Remove all reddit trending stocks
             userWatchlist = userWatchlist.filter(t => !redditTrending.includes(t));
+            localStorage.setItem('userWatchlist', JSON.stringify(userWatchlist));
+            renderWatchlistTable();
         } else {
-            // Add them
+            // Add them - triggers fetch
+            const promises = [];
             redditTrending.forEach(t => {
-                if(!userWatchlist.includes(t)) userWatchlist.push(t);
+                if(!userWatchlist.includes(t)) {
+                    userWatchlist.push(t);
+                    promises.push(getTickerData(t, 'full'));
+                }
             });
+            localStorage.setItem('userWatchlist', JSON.stringify(userWatchlist));
+            Promise.all(promises).then(() => manualRefresh());
         }
-        
-        localStorage.setItem('userWatchlist', JSON.stringify(userWatchlist));
         updateTrendingButtonState();
-        manualRefresh();
     }
     
     function initPortfolioConfig() {
@@ -1077,11 +1055,13 @@
             accountOverrides[accId] = { ticker: ticker, qty: qty };
             localStorage.setItem('accountOverrides', JSON.stringify(accountOverrides));
             
-            // Apply immediately to global data
             const acc = globalAccountsData.find(a => a.id === accId);
             if(acc) {
-                processAndRender(globalAccountsData, true);
-                alert("Saved! Dashboard updated.");
+                // Fetch full data for new ticker if needed
+                getTickerData(ticker, 'full').then(() => {
+                    manualRefresh();
+                    alert("Saved! Dashboard updated.");
+                });
             }
         }
     }
@@ -1093,19 +1073,18 @@
             localStorage.setItem('accountOverrides', JSON.stringify(accountOverrides));
             document.getElementById('config-ticker').value = '';
             document.getElementById('config-qty').value = '';
-            processAndRender(globalAccountsData, true);
+            manualRefresh();
         }
     }
 
     // ==========================================
-    // LOGIC: REAL-TIME MARKET DATA (UPDATED)
+    // LOGIC: REAL-TIME MARKET DATA (OPTIMIZED)
     // ==========================================
 
-    async function getMonthToDatePerformance(ticker) {
+    async function getTickerData(ticker, mode = 'live') {
         if (!ticker || ticker === 'Unknown' || ticker === '-') return null;
         const cleanTicker = TICKER_MAP[ticker] || ticker.split(' ')[0]; 
         
-        // Randomize proxy order to distribute load
         const proxies = [
             'https://corsproxy.io/?',
             'https://api.allorigins.win/get?url=',
@@ -1114,7 +1093,12 @@
         ].sort(() => Math.random() - 0.5);
 
         const cacheBuster = `&_=${new Date().getTime()}`;
-        const targetUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${cleanTicker}?range=3mo&interval=1d${cacheBuster}`;
+        
+        // OPTIMIZATION:
+        // 'full' = range=max (Heavy, Run Once)
+        // 'live' = range=1d (Light, Run Loop)
+        const range = mode === 'full' ? 'max' : '1d';
+        const targetUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${cleanTicker}?range=${range}&interval=1d${cacheBuster}`;
 
         for (const proxy of proxies) {
             try {
@@ -1132,233 +1116,270 @@
 
                 if (!closes || closes.length === 0) continue;
                 
-                // DATA POINT 1: Current Price (Last valid close)
+                // Get Latest Price
                 let currentPrice = null;
-                let lastIndex = -1;
                 for (let i = closes.length - 1; i >= 0; i--) {
-                    if (closes[i] !== null) { 
-                        currentPrice = closes[i]; 
-                        lastIndex = i;
-                        break; 
-                    }
+                    if (closes[i] !== null) { currentPrice = closes[i]; break; }
                 }
 
-                // DATA POINT 2: Month Start Price (for Account MTD)
-                const now = new Date();
-                const startOfCurrentMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-                let baselinePrice = null;
-                for (let i = timestamps.length - 1; i >= 0; i--) {
-                    if (new Date(timestamps[i] * 1000) < startOfCurrentMonth && closes[i]) {
-                        baselinePrice = closes[i]; break;
-                    }
-                }
+                // Parse History (Only on Full)
+                let history = globalPriceCache[cleanTicker] ? globalPriceCache[cleanTicker].history : {};
                 
-                // DATA POINT 3: STRICT Previous Day Close (For Watchlist Day G/L)
-                let prevClose = null;
-                if (lastIndex > 0) {
-                     for (let j = lastIndex - 1; j >= 0; j--) {
-                         if (closes[j] !== null) {
-                             prevClose = closes[j];
-                             break;
-                         }
-                     }
+                if (mode === 'full') {
+                    // Find indices roughly 1W, 1M, etc ago
+                    // Trading days approx: 1W=5, 1M=21, 3M=63, 6M=126, 1Y=252, 3Y=756, 5Y=1260
+                    const len = closes.length;
+                    const getVal = (offset) => {
+                        const idx = len - 1 - offset;
+                        return (idx >= 0 && closes[idx]) ? closes[idx] : null;
+                    };
+                    
+                    history = {
+                        d1: quote.meta.chartPreviousClose || getVal(1),
+                        w1: getVal(5),
+                        m1: getVal(21),
+                        m3: getVal(63),
+                        m6: getVal(126),
+                        y1: getVal(252),
+                        y3: getVal(756),
+                        y5: getVal(1260),
+                        max: closes[0] 
+                    };
                 }
-                
-                if(!prevClose) prevClose = quote.meta.chartPreviousClose;
-                if(!prevClose) prevClose = baselinePrice;
 
-                const lastTimestamp = timestamps[timestamps.length - 1];
-
-                const result = { 
+                // Update Cache
+                globalPriceCache[cleanTicker] = {
                     price: currentPrice,
-                    prevClose: prevClose,
-                    mtdRate: (baselinePrice && currentPrice) ? (currentPrice - baselinePrice) / baselinePrice : 0,
-                    dayRate: (prevClose && currentPrice) ? (currentPrice - prevClose) / prevClose : 0,
-                    ts: lastTimestamp 
+                    history: history,
+                    ts: Date.now()
                 };
                 
-                // UPDATE CACHE ON SUCCESS
-                globalPriceCache[cleanTicker] = result;
-                
-                return result;
+                return globalPriceCache[cleanTicker];
 
             } catch (e) {
-                // Continue to next proxy
+                // Try next proxy
             }
         }
         
-        // IF ALL PROXIES FAIL, RETURN CACHED VERSION IF EXISTS
-        if(globalPriceCache[cleanTicker]) {
-            return { ...globalPriceCache[cleanTicker], cached: true };
-        }
-        
+        // Fallback to cache if network fails
+        if(globalPriceCache[cleanTicker]) return globalPriceCache[cleanTicker];
         return null; 
     }
 
-    async function updateWithLiveMarketData(accounts, isSilent = false) {
-        if (isUpdating) return;
-        isUpdating = true;
-        
-        const statusDiv = document.getElementById('loading');
+    // MAIN FETCH CONTROLLER
+    async function updateDataSequence(mode) {
         const headerStatus = document.getElementById('latest-date-display');
-        const btn = document.getElementById('manual-refresh-btn');
+        const statusDot = headerStatus ? headerStatus.querySelector('.live-dot') : null;
+        if(statusDot) statusDot.className = "live-dot status-working";
         
-        if (!isSilent) {
-            statusDiv.style.opacity = '1';
-            statusDiv.style.display = 'flex';
-            statusDiv.innerHTML = "Fetching Real-Time Market Data...<br><span style='font-size:0.8em; font-weight:normal'>Updating Portfolio & Watchlist...</span>";
-        } else {
-            headerStatus.innerHTML = "<span class='live-dot'></span> Updating...";
-            headerStatus.style.color = "#e67e22";
-            if(btn) btn.innerHTML = "<span>↻</span> ...";
-        }
+        // 1. Gather all tickers (Watchlist + Portfolio)
+        const allTickers = new Set([...userWatchlist]);
+        globalAccountsData.forEach(acc => {
+             const override = accountOverrides[acc.id];
+             if(override && override.ticker) allTickers.add(override.ticker);
+             else {
+                 const t = acc.data[acc.data.length-1].invested;
+                 if(t && t !== '-' && t !== 'Unknown') allTickers.add(t);
+                 // Hardcoded mappings
+                 if (acc.id.includes('fidelity')) allTickers.add('GOOGL');
+                 if (acc.id.includes('boeing')) allTickers.add('BND');
+                 if (acc.id.includes('wells')) allTickers.add('BIL');
+             }
+        });
+
+        // 2. Fetch
+        // If mode is 'live', we just fetch range=1d for speed. 
+        // Note: 'full' mode takes longer but runs once.
+        const promises = Array.from(allTickers).map(t => getTickerData(t, mode));
+        await Promise.all(promises);
+
+        // 3. Update Portfolio Logic
+        processPortfolioUpdates();
         
+        // 4. Update UI
+        renderWatchlistTable();
+        processAndRender(globalAccountsData, true);
+
+        if(statusDot) statusDot.className = "live-dot";
+    }
+
+    function processPortfolioUpdates() {
         const now = new Date();
         const currentYear = now.getFullYear();
         const currentMonthVal = now.getMonth() + 1; 
         const currentMonthKey = `${currentYear}-${String(currentMonthVal).padStart(2, '0')}`;
-        
-        // WATCHLIST FETCH
-        watchlistDataStore = [];
-        try {
-             await Promise.all(userWatchlist.map(async (ticker) => {
-                 const data = await getMonthToDatePerformance(ticker);
-                 if(data) {
-                     watchlistDataStore.push({
-                         ticker: ticker,
-                         price: data.price,
-                         dayChange: data.dayRate
-                     });
-                 } else {
-                      watchlistDataStore.push({ ticker: ticker, price: 0, dayChange: 0, error: true });
-                 }
-             }));
-             renderWatchlistColumns();
-        } catch(e) { console.error("Watchlist Error", e); }
 
+        globalAccountsData.forEach(acc => {
+            if (acc.data.length === 0) return;
+            
+            const override = accountOverrides[acc.id];
+            let ticker = override ? override.ticker : acc.data[acc.data.length-1].invested;
+            
+            // Map knowns
+            if(!ticker || ticker === 'Unknown') {
+                 if (acc.id.includes('fidelity')) ticker = 'GOOGL';
+                 if (acc.id.includes('boeing')) ticker = 'BND';
+                 if (acc.id.includes('wells')) ticker = 'BIL';
+            }
 
-        // ACCOUNT FETCH
-        try {
-            await Promise.all(accounts.map(async (acc) => {
-                if (acc.data.length === 0) return;
+            const cleanTicker = TICKER_MAP[ticker] || (ticker ? ticker.split(' ')[0] : null);
+            const marketData = globalPriceCache[cleanTicker];
+
+            // Find or Create Live Entry
+            const startOfThisMonth = new Date(currentYear, currentMonthVal - 1, 1);
+            let baselineEntry = null;
+             for (let i = acc.data.length - 1; i >= 0; i--) {
+                if (acc.data[i].dateObj < startOfThisMonth) {
+                    baselineEntry = acc.data[i];
+                    break;
+                }
+            }
+
+            if (!baselineEntry) return;
+
+            let liveEntry = acc.data.find(d => d.key === currentMonthKey);
+            if (!liveEntry) {
+                liveEntry = {
+                    key: currentMonthKey,
+                    dateObj: startOfThisMonth,
+                    deposits: 0, income: 0, marketGain: 0,
+                    cumulative: baselineEntry.cumulative,
+                    balance: baselineEntry.balance,
+                    invested: ticker,
+                    rawWithdrawals: 0, isLive: true, isError: false, timestamp: 0
+                };
+                acc.data.push(liveEntry);
+            }
+
+            if (marketData && marketData.price && marketData.history && marketData.history.m1) {
+                const baselinePrice = marketData.history.m1; // Price ~1 month ago
+                const currentPrice = marketData.price;
+                const mtdRate = (currentPrice - baselinePrice) / baselinePrice;
                 
-                // CHECK FOR OVERRIDE TICKER
-                const override = accountOverrides[acc.id];
-                let ticker = override ? override.ticker : null;
-
-                const startOfThisMonth = new Date(currentYear, currentMonthVal - 1, 1);
-                let baselineEntry = null;
-                for (let i = acc.data.length - 1; i >= 0; i--) {
-                    if (acc.data[i].dateObj < startOfThisMonth) {
-                        baselineEntry = acc.data[i];
-                        break;
-                    }
-                }
-
-                if (!baselineEntry) return;
-
-                let liveEntry = acc.data.find(d => d.key === currentMonthKey);
-                let isNewRow = false;
-
-                if (!liveEntry) {
-                    isNewRow = true;
-                    liveEntry = {
-                        key: currentMonthKey,
-                        dateObj: startOfThisMonth,
-                        deposits: 0,
-                        income: 0,
-                        marketGain: 0,
-                        cumulative: baselineEntry.cumulative,
-                        balance: baselineEntry.balance,
-                        invested: baselineEntry.invested,
-                        rawWithdrawals: 0, 
-                        isLive: true,
-                        isError: false,
-                        timestamp: 0 
-                    };
-                } else {
-                    liveEntry.isLive = true;
-                    liveEntry.isError = false;
-                }
-
-                if(!ticker) {
-                    ticker = liveEntry.invested; 
-                    if (acc.id.includes('fidelity')) ticker = 'GOOGL';
-                    if (acc.id.includes('boeing')) ticker = 'Boeing (Bonds)';
-                    if (acc.id.includes('wells')) ticker = 'Wells Fargo (Cash)';
-                }
-
-                const marketData = await getMonthToDatePerformance(ticker);
+                liveEntry.isError = false;
+                liveEntry.timestamp = marketData.ts / 1000;
                 
-                if (marketData === null) {
-                    liveEntry.isError = true;
-                    if (isNewRow) {
-                        liveEntry.marketGain = 0;
-                        liveEntry.balance = baselineEntry.balance + liveEntry.deposits + liveEntry.income;
-                    }
+                // If quantity override exists, use exact math
+                if(override && override.qty) {
+                     liveEntry.balance = currentPrice * override.qty;
+                     liveEntry.marketGain = liveEntry.balance - liveEntry.deposits - liveEntry.income - baselineEntry.balance; 
+                     liveEntry.cumulative = baselineEntry.cumulative + liveEntry.marketGain + liveEntry.income; 
                 } else {
-                    const growthAmount = baselineEntry.balance * marketData.mtdRate;
-                    liveEntry.marketGain = growthAmount; 
-                    liveEntry.balance = baselineEntry.balance + growthAmount + liveEntry.deposits + liveEntry.income;
-                    liveEntry.cumulative = baselineEntry.cumulative + growthAmount + liveEntry.income;
-                    liveEntry.timestamp = marketData.ts;
-                    
-                    if(override && override.qty) {
-                         liveEntry.balance = marketData.price * override.qty;
-                         liveEntry.marketGain = liveEntry.balance - liveEntry.deposits - liveEntry.income - baselineEntry.balance; 
-                         liveEntry.cumulative = baselineEntry.cumulative + liveEntry.marketGain + liveEntry.income; 
-                    }
+                     // Approximate based on % gain
+                     const growthAmount = baselineEntry.balance * mtdRate;
+                     liveEntry.marketGain = growthAmount;
+                     liveEntry.balance = baselineEntry.balance + growthAmount + liveEntry.deposits + liveEntry.income;
+                     liveEntry.cumulative = baselineEntry.cumulative + growthAmount + liveEntry.income;
                 }
-
-                if (isNewRow) {
-                    acc.data.push(liveEntry);
-                }
-            }));
-        } catch (e) {
-            console.error(e);
-        } finally {
-            isUpdating = false;
-            if(btn) btn.innerHTML = "<span>↻</span> Update";
-        }
+            } else {
+                 // No data? Keep static
+                 liveEntry.isError = true; 
+            }
+        });
     }
-    
-    function renderWatchlistColumns() {
-        const gainers = watchlistDataStore.filter(i => i.dayChange >= 0).sort((a,b) => b.dayChange - a.dayChange);
-        const losers = watchlistDataStore.filter(i => i.dayChange < 0).sort((a,b) => a.dayChange - b.dayChange); 
 
-        const fillBody = (items, bodyId) => {
-            const body = document.getElementById(bodyId);
-            body.innerHTML = '';
-            items.forEach(item => {
-                const tr = document.createElement('tr');
-                const colorClass = item.dayChange >= 0 ? 'text-green' : 'text-red';
-                const sign = item.dayChange >= 0 ? '+' : '';
-                const pct = (item.dayChange * 100).toFixed(2) + '%';
-                
-                tr.innerHTML = `
-                    <td style="font-weight:bold">${item.ticker}</td>
-                    <td>${fmtMoney(item.price)}</td>
-                    <td class="${colorClass}">${sign}${pct}</td>
-                    <td style="text-align:center">
-                        <button onclick="removeTicker('${item.ticker}')" style="background:transparent; border:none; color:var(--text); opacity:0.5; cursor:pointer;" title="Remove">
-                            <i class="fas fa-times"></i>
-                        </button>
-                    </td>
-                `;
-                body.appendChild(tr);
-            });
-        };
+    function renderWatchlistTable() {
+        // Collect Vested Tickers
+        const vestedSet = new Set();
+        globalAccountsData.forEach(acc => {
+            const override = accountOverrides[acc.id];
+            const t = override ? override.ticker : acc.data[acc.data.length-1].invested;
+             if(t) {
+                let clean = TICKER_MAP[t] || t.split(' ')[0];
+                if(clean === 'Unknown' && acc.id.includes('fidelity')) clean = 'GOOGL';
+                if(clean === 'Unknown' && acc.id.includes('boeing')) clean = 'BND';
+                vestedSet.add(clean);
+             }
+        });
 
-        fillBody(gainers, 'watchlist-gainers-body');
-        fillBody(losers, 'watchlist-losers-body');
+        const body = document.getElementById('watchlist-body');
+        body.innerHTML = '';
+        
+        // Prepare data list
+        const rows = userWatchlist.map(ticker => {
+            const data = globalPriceCache[ticker];
+            if(!data) return { ticker, price: 0, d1: 0 };
+            
+            const p = data.price;
+            const h = data.history || {};
+            
+            const calc = (histPrice) => histPrice ? ((p - histPrice) / histPrice) : 0;
+            
+            return {
+                ticker,
+                price: p,
+                d1: calc(h.d1),
+                w1: calc(h.w1),
+                m1: calc(h.m1),
+                m3: calc(h.m3),
+                m6: calc(h.m6),
+                y1: calc(h.y1),
+                y3: calc(h.y3),
+                y5: calc(h.y5),
+                max: calc(h.max)
+            };
+        });
+
+        // Sort by Day Change (Best to Worst)
+        rows.sort((a,b) => b.d1 - a.d1);
+
+        rows.forEach(r => {
+            const tr = document.createElement('tr');
+            
+            // Helper to format cells
+            const tdPct = (val) => {
+                const c = val >= 0 ? 'text-green' : 'text-red';
+                const s = val >= 0 ? '+' : '';
+                return `<td class="${c}" style="text-align:right">${s}${(val*100).toFixed(2)}%</td>`;
+            };
+
+            const isVested = vestedSet.has(r.ticker);
+            if(isVested) tr.className = "vested-row";
+            
+            const badge = isVested ? '<span class="vested-badge">Vested</span>' : '';
+
+            tr.innerHTML = `
+                <td style="font-weight:bold; text-align:left;">${r.ticker}${badge}</td>
+                <td style="text-align:right; font-weight:600;">${fmtMoney(r.price)}</td>
+                ${tdPct(r.d1)}
+                ${tdPct(r.w1)}
+                ${tdPct(r.m1)}
+                ${tdPct(r.m3)}
+                ${tdPct(r.m6)}
+                ${tdPct(r.y1)}
+                ${tdPct(r.y3)}
+                ${tdPct(r.y5)}
+                ${tdPct(r.max)}
+                <td style="text-align:center">
+                     <button onclick="removeTicker('${r.ticker}')" style="background:transparent; border:none; color:var(--text); opacity:0.3; cursor:pointer;"><i class="fas fa-times"></i></button>
+                </td>
+            `;
+            body.appendChild(tr);
+        });
     }
     
     async function manualRefresh() {
-        if(isUpdating) return;
-        await updateWithLiveMarketData(globalAccountsData, true);
-        processAndRender(globalAccountsData, true);
+        // Force a full update
+        await updateDataSequence('full'); 
+    }
+
+    async function autoRefreshLoop() {
+        if (!isAutoRefreshRunning) return;
+        
         const isMarket = isMarketOpen();
-        refreshTimer = isMarket ? 1 : 60;
+        const interval = isMarket ? 5000 : 30000; // 5s when open, 30s when closed. 1s is too aggressive for free proxies.
+
+        // Wait for update to complete
+        await updateDataSequence('live');
+        
+        // Schedule next
+        setTimeout(autoRefreshLoop, interval);
+    }
+    
+    function startAutoRefresh() {
+        if(isAutoRefreshRunning) return;
+        isAutoRefreshRunning = true;
+        autoRefreshLoop();
     }
 
     // ==========================================
@@ -1882,7 +1903,10 @@
             globalAccountsData = accounts;
 
             initPortfolioConfig();
-            await updateWithLiveMarketData(accounts, false);
+            
+            // INITIAL LOAD: GET FULL HISTORY
+            document.getElementById('loading').innerHTML = "Fetching Historical Market Data...<br>This runs once to calibrate analytics.";
+            await updateDataSequence('full');
 
             processAndRender(accounts, false);
             
@@ -1913,30 +1937,6 @@
         const end = 16 * 60;       
         
         return minutesOfDay >= start && minutesOfDay < end;
-    }
-
-    function startAutoRefresh() {
-        let isMarket = isMarketOpen();
-        refreshTimer = isMarket ? 1 : 60;
-
-        setInterval(() => {
-            refreshTimer--;
-            
-            const currentMarketStatus = isMarketOpen();
-            if (currentMarketStatus !== isMarket) {
-                isMarket = currentMarketStatus;
-            }
-            
-            if (refreshTimer <= 0) {
-                console.log("Auto-Refreshing Market Data...");
-                updateWithLiveMarketData(globalAccountsData, true); 
-                processAndRender(globalAccountsData, true); 
-                
-                refreshTimer = isMarket ? 1 : 60;
-            }
-            
-            document.getElementById('refresh-timer').innerText = `Updates in ${refreshTimer}s`;
-        }, 1000);
     }
 
     function createSnapshotTable(accounts, alignedData, index, tableId, headerId, monthKey) {
