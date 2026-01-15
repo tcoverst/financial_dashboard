@@ -320,7 +320,7 @@
         <button class="refresh-btn" onclick="manualRefresh()" id="manual-refresh-btn" style="margin:0;">
             <span>↻</span> Update
         </button>
-        <div id="refresh-timer" style="font-size: 0.75em; color: #999;">Updates in 1s</div>
+        <div id="refresh-timer" style="font-size: 0.75em; color: #999;">Updates in 60s</div>
     </div>
 </div>
 
@@ -844,9 +844,6 @@
     let g_lastInflow = 0;
     let g_lastDateStr = "";
     
-    // GLOBAL PRICE CACHE (ROBUSTNESS)
-    let globalPriceCache = {};
-
     // WATCHLIST & CONFIG
     let userWatchlist = JSON.parse(localStorage.getItem('userWatchlist')) || ['VIGIX', 'VTSAX', 'GOOGL', 'TSLA', 'NVDA', 'BND'];
     let accountOverrides = JSON.parse(localStorage.getItem('accountOverrides')) || {};
@@ -1102,18 +1099,18 @@
     // ==========================================
 
     async function getMonthToDatePerformance(ticker) {
-        if (!ticker || ticker === 'Unknown' || ticker === '-') return null;
+        if (!ticker || ticker === 'Unknown' || ticker === '-') return 0;
         const cleanTicker = TICKER_MAP[ticker] || ticker.split(' ')[0]; 
-        
-        // Randomize proxy order to distribute load
+
         const proxies = [
             'https://corsproxy.io/?',
             'https://api.allorigins.win/get?url=',
-            'https://thingproxy.freeboard.io/fetch/',
-            'https://api.codetabs.com/v1/proxy?quest='
-        ].sort(() => Math.random() - 0.5);
+            'https://thingproxy.freeboard.io/fetch/' 
+        ];
 
         const cacheBuster = `&_=${new Date().getTime()}`;
+        
+        // Use range=3mo to get Month performance, and verify last two closes for Day Performance
         const targetUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${cleanTicker}?range=3mo&interval=1d${cacheBuster}`;
 
         for (const proxy of proxies) {
@@ -1154,8 +1151,10 @@
                 }
                 
                 // DATA POINT 3: STRICT Previous Day Close (For Watchlist Day G/L)
+                // We use the second to last VALID close from the array to ensure we aren't using meta data which might be mismatched
                 let prevClose = null;
                 if (lastIndex > 0) {
+                     // Find the valid close before the current one
                      for (let j = lastIndex - 1; j >= 0; j--) {
                          if (closes[j] !== null) {
                              prevClose = closes[j];
@@ -1164,34 +1163,24 @@
                      }
                 }
                 
+                // Fallback to meta if array scan fails (unlikely)
                 if(!prevClose) prevClose = quote.meta.chartPreviousClose;
-                if(!prevClose) prevClose = baselinePrice;
+                if(!prevClose) prevClose = baselinePrice; // Final fallback
 
                 const lastTimestamp = timestamps[timestamps.length - 1];
 
-                const result = { 
+                return { 
                     price: currentPrice,
                     prevClose: prevClose,
                     mtdRate: (baselinePrice && currentPrice) ? (currentPrice - baselinePrice) / baselinePrice : 0,
                     dayRate: (prevClose && currentPrice) ? (currentPrice - prevClose) / prevClose : 0,
                     ts: lastTimestamp 
                 };
-                
-                // UPDATE CACHE ON SUCCESS
-                globalPriceCache[cleanTicker] = result;
-                
-                return result;
 
             } catch (e) {
-                // Continue to next proxy
+                console.warn(`Proxy failed for ${cleanTicker}`);
             }
         }
-        
-        // IF ALL PROXIES FAIL, RETURN CACHED VERSION IF EXISTS
-        if(globalPriceCache[cleanTicker]) {
-            return { ...globalPriceCache[cleanTicker], cached: true };
-        }
-        
         return null; 
     }
 
@@ -1302,11 +1291,11 @@
                     liveEntry.balance = baselineEntry.balance + growthAmount + liveEntry.deposits + liveEntry.income;
                     liveEntry.cumulative = baselineEntry.cumulative + growthAmount + liveEntry.income;
                     liveEntry.timestamp = marketData.ts;
-                    
+                    // IF OVERRIDE QTY EXISTS, RECALCULATE BALANCE BASED ON PRICE * QTY
                     if(override && override.qty) {
                          liveEntry.balance = marketData.price * override.qty;
                          liveEntry.marketGain = liveEntry.balance - liveEntry.deposits - liveEntry.income - baselineEntry.balance; 
-                         liveEntry.cumulative = baselineEntry.cumulative + liveEntry.marketGain + liveEntry.income; 
+                         liveEntry.cumulative = baselineEntry.cumulative + liveEntry.marketGain + liveEntry.income; // Approx
                     }
                 }
 
@@ -1323,8 +1312,9 @@
     }
     
     function renderWatchlistColumns() {
+        // Filter into two arrays
         const gainers = watchlistDataStore.filter(i => i.dayChange >= 0).sort((a,b) => b.dayChange - a.dayChange);
-        const losers = watchlistDataStore.filter(i => i.dayChange < 0).sort((a,b) => a.dayChange - b.dayChange); 
+        const losers = watchlistDataStore.filter(i => i.dayChange < 0).sort((a,b) => a.dayChange - b.dayChange); // Worst first
 
         const fillBody = (items, bodyId) => {
             const body = document.getElementById(bodyId);
@@ -1358,7 +1348,7 @@
         await updateWithLiveMarketData(globalAccountsData, true);
         processAndRender(globalAccountsData, true);
         const isMarket = isMarketOpen();
-        refreshTimer = isMarket ? 1 : 60;
+        refreshTimer = isMarket ? 10 : 60;
     }
 
     // ==========================================
@@ -1917,7 +1907,7 @@
 
     function startAutoRefresh() {
         let isMarket = isMarketOpen();
-        refreshTimer = isMarket ? 1 : 60;
+        refreshTimer = isMarket ? 10 : 60;
 
         setInterval(() => {
             refreshTimer--;
@@ -1932,7 +1922,7 @@
                 updateWithLiveMarketData(globalAccountsData, true); 
                 processAndRender(globalAccountsData, true); 
                 
-                refreshTimer = isMarket ? 1 : 60;
+                refreshTimer = isMarket ? 10 : 60;
             }
             
             document.getElementById('refresh-timer').innerText = `Updates in ${refreshTimer}s`;
