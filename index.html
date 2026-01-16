@@ -1223,6 +1223,39 @@
                         mtdBaseline = closes[i]; break;
                     }
                 }
+                
+                // --- ROBUST 1D CHANGE LOGIC ---
+                // The issue: range=max sometimes gives 'chartPreviousClose' as the start of the chart (years ago).
+                // We sanity check meta.previousClose. If it's absurdly small or missing, we calculate from history.
+                
+                let p1d = 0;
+                
+                // 1. Try Meta Data first (most accurate for today/yesterday)
+                if(currentPrice && prevClose) {
+                    // Sanity check: If Prev Close is less than 50% of Current Price (and current > 1), it's likely bad data (e.g. IPO price)
+                    if (prevClose > (currentPrice * 0.5) && prevClose < (currentPrice * 1.5)) {
+                         p1d = (currentPrice - prevClose) / prevClose;
+                    } else {
+                        prevClose = null; // Mark as invalid to trigger fallback
+                    }
+                }
+                
+                // 2. Fallback to History Array if Meta failed
+                if (!prevClose || p1d === 0 && lastIndex > 0) {
+                     // Get the valid close before the last one
+                     let penIndex = -1;
+                     for (let j = lastIndex - 1; j >= 0; j--) {
+                         if (closes[j] !== null) { 
+                             prevClose = closes[j]; 
+                             penIndex = j;
+                             break; 
+                         }
+                     }
+                     
+                     if (currentPrice && prevClose) {
+                         p1d = (currentPrice - prevClose) / prevClose;
+                     }
+                }
 
                 return { 
                     price: currentPrice,
@@ -1230,8 +1263,7 @@
                     mtdRate: (mtdBaseline && currentPrice) ? (currentPrice - mtdBaseline) / mtdBaseline : 0,
                     
                     // METRICS
-                    // 1D: Explicitly uses (Live - Official Prev Close) / Official Prev Close
-                    p1d: (prevClose && currentPrice) ? (currentPrice - prevClose) / prevClose : 0,
+                    p1d: p1d,
                     
                     p1w: (getPriceAgo(7, 'days') && currentPrice) ? (currentPrice - getPriceAgo(7, 'days')) / getPriceAgo(7, 'days') : 0,
                     p1m: (getPriceAgo(1, 'months') && currentPrice) ? (currentPrice - getPriceAgo(1, 'months')) / getPriceAgo(1, 'months') : 0,
@@ -2213,442 +2245,6 @@
                     y: { beginAtZero: true, grid: { color: '#f0f0f0' }, ticks: { font: { size: 9 } } },
                     x: { grid: { display: false }, ticks: { font: { size: 8 }, maxRotation: 90, minRotation: 90 } }
                 }
-            }
-        });
-    }
-
-    function initIncomeAnalysis(accounts) {
-        const container = document.getElementById('income-filter-container');
-        
-        if (container.children.length > 1) return; 
-
-        const defaultIds = ['wellsFargo', 'vanguardUTMA', 'vanguardA', 'vanguardB'];
-
-        accounts.forEach(acc => {
-            const label = document.createElement('label');
-            label.className = 'checkbox-item';
-            const isChecked = defaultIds.includes(acc.id) ? 'checked' : '';
-            label.innerHTML = `<input type="checkbox" value="${acc.id}" ${isChecked} onchange="updateIncomeAnalysis()"> ${acc.name}`;
-            container.appendChild(label);
-        });
-
-        updateIncomeAnalysis(false); 
-    }
-
-    function updateIncomeAnalysis(isSilent = false) {
-        const checkboxes = document.querySelectorAll('#income-filter-container input[type="checkbox"]');
-        const selectedIds = Array.from(checkboxes).filter(cb => cb.checked).map(cb => cb.value);
-
-        const targetAccounts = globalAccountsData.filter(a => selectedIds.includes(a.id));
-        
-        const allMonths = new Set();
-        globalAccountsData.forEach(acc => acc.data.forEach(d => { if(!d.isLive) allMonths.add(d.key); }));
-        const sortedMonths = Array.from(allMonths).sort().slice(-24); 
-
-        const incomeData = sortedMonths.map(month => {
-            let sum = 0;
-            targetAccounts.forEach(acc => {
-                const entry = acc.data.find(d => d.key === month);
-                if (entry) sum += entry.rawDeposits;
-            });
-            return sum;
-        });
-
-        const last12Data = incomeData.slice(-12);
-        const trailing12Sum = last12Data.reduce((a,b) => a+b, 0);
-        document.getElementById('stat-12mo-income').innerText = fmtMoneySimple(trailing12Sum);
-
-        const cGreen = palette[2];
-
-        if(charts.incomeTrend) charts.incomeTrend.destroy();
-
-        charts.incomeTrend = new Chart(document.getElementById('incomeTrendChart'), {
-            type: 'bar',
-            plugins: [ChartDataLabels],
-            data: {
-                labels: sortedMonths,
-                datasets: [{
-                    label: 'Total After-Tax Deposits',
-                    data: incomeData,
-                    backgroundColor: cGreen + '88',
-                    borderColor: cGreen,
-                    borderWidth: 1,
-                    borderRadius: 3,
-                    barPercentage: 1.0, 
-                    categoryPercentage: 1.0 
-                }]
-            },
-            options: {
-                animation: isSilent ? false : {}, 
-                responsive: true, maintainAspectRatio: false,
-                plugins: {
-                    legend: { display: false },
-                    datalabels: {
-                        color: '#2c3e50',
-                        anchor: isMobile ? 'end' : 'end', 
-                        align: isMobile ? 'top' : 'end', 
-                        rotation: isMobile ? -90 : 0,    
-                        font: { weight: 'bold', size: 9 },
-                        formatter: (val) => val > 500 ? fmtMoneySimple(val) : ''
-                    }
-                },
-                scales: {
-                    y: { beginAtZero: true, grid: { color: '#f0f0f0' }, ticks: { font: { size: 9 } } },
-                    x: { grid: { display: false }, ticks: { font: { size: 8 }, maxRotation: 90, minRotation: 90 } }
-                }
-            }
-        });
-    }
-
-    function processAndRender(accounts, isSilent = false) {
-        const allMonths = new Set();
-        accounts.forEach(acc => acc.data.forEach(d => allMonths.add(d.key)));
-        const sortedMonths = Array.from(allMonths).sort();
-
-        const alignedData = {};
-        const globalTotals = { balance: [], gainLoss: [], income: [], deposits: [], cumulative: [] };
-        
-        accounts.forEach(acc => alignedData[acc.id] = []);
-        
-        // --- YEARLY DATA (TWR) AGGREGATION SETUP ---
-        // We will compute Linked Monthly Returns: Product(1 + Rm) - 1
-        const yearlyTwr = new Map();
-
-        sortedMonths.forEach((monthKey, i) => {
-            let monthBalance = 0, monthGain = 0, monthIncome = 0, monthDeposits = 0, monthCumulative = 0;
-
-            accounts.forEach(acc => {
-                const entry = acc.data.find(d => d.key === monthKey);
-                if (entry) {
-                    alignedData[acc.id].push(entry);
-                    monthBalance += entry.balance;
-                    monthGain += entry.marketGain + entry.income; 
-                    monthIncome += entry.income;
-                    monthDeposits += entry.deposits;
-                    monthCumulative += entry.cumulative;
-                } else {
-                    alignedData[acc.id].push({ balance: 0, marketGain: 0, income: 0, deposits: 0, cumulative: 0, invested: '-', rawWithdrawals: 0 });
-                }
-            });
-
-            globalTotals.balance.push(monthBalance);
-            globalTotals.gainLoss.push(monthGain);
-            globalTotals.income.push(monthIncome);
-            globalTotals.deposits.push(monthDeposits);
-            globalTotals.cumulative.push(monthCumulative);
-            
-            // --- HIGH ACCURACY MONTHLY RETURN CALCULATION ---
-            const year = monthKey.split('-')[0];
-            if(!yearlyTwr.has(year)) {
-                yearlyTwr.set(year, 1.0); 
-            }
-            
-            // Determine Start Balance for this Month
-            // If i=0, we assume start balance was (End - Gain - NetTransfers)
-            // Otherwise, start balance is previous month's end balance
-            let startBal = (i === 0) ? (monthBalance - monthGain - monthDeposits) : globalTotals.balance[i-1];
-            
-            // Handle edge case where account is empty/just started
-            if (startBal < 0) startBal = 0; 
-
-            // Modified Dietz for Monthly Period:
-            // Numerator: Gain (Market Gain + Income)
-            // Denominator: Start Balance + 0.5 * External Flows (Deposits)
-            // Note: 'monthDeposits' here is Net Transfers. 
-            let denominator = startBal + (0.5 * monthDeposits);
-            
-            let monthlyReturn = 0;
-            if (denominator > 0) {
-                monthlyReturn = monthGain / denominator;
-            } else if (monthGain !== 0) {
-                 // Edge case: gain with 0 denominator (e.g. infinite return on 0 base)
-                 // We cap or ignore to prevent chart explosion, or treat as pure gain if start is 0
-                 monthlyReturn = 0; 
-            }
-            
-            // Link Geometrically
-            let currentTwr = yearlyTwr.get(year);
-            yearlyTwr.set(year, currentTwr * (1 + monthlyReturn));
-        });
-        
-        // --- YEARLY CHART DATA ---
-        const yearlyLabels = Array.from(yearlyTwr.keys());
-        const yearlyReturns = [];
-        let sumPct = 0;
-        
-        yearlyLabels.forEach(y => {
-            const val = yearlyTwr.get(y);
-            const pct = (val - 1) * 100; // Convert (1.15) -> 15%
-            yearlyReturns.push(pct);
-            sumPct += pct;
-        });
-        
-        const avgReturn = yearlyReturns.length ? sumPct / yearlyReturns.length : 0;
-        const avgEl = document.getElementById('stat-avg-yearly-return');
-        if(avgEl) {
-            avgEl.innerText = (avgReturn >= 0 ? '+' : '') + avgReturn.toFixed(2) + '%';
-            avgEl.className = avgReturn >= 0 ? 'text-green' : 'text-red';
-            avgEl.style.fontSize = "1.5em";
-            avgEl.style.fontWeight = "bold";
-        }
-
-        const lastIndex = sortedMonths.length - 1;
-        
-        const now = new Date();
-        const timeString = now.toLocaleTimeString();
-        document.getElementById('latest-date-display').innerHTML = `<span class="live-dot"></span>Data as of ${sortedMonths[lastIndex]} (${timeString})`;
-        document.getElementById('latest-date-display').style.color = "#c0392b"; 
-        
-        document.getElementById('stat-networth').innerText = fmtMoney(globalTotals.balance[lastIndex]);
-        
-        const totalGain = globalTotals.cumulative[lastIndex];
-        const gainEl = document.getElementById('stat-lifetime-gain');
-        
-        let netInvested = globalTotals.balance[lastIndex] - totalGain;
-        let lifetimePct = 0;
-        if(netInvested !== 0) {
-            lifetimePct = (totalGain / netInvested) * 100;
-        }
-        
-        const lifetimePctText = ` <span style="font-size:0.6em; opacity:0.8">(${lifetimePct >= 0 ? '+' : ''}${lifetimePct.toFixed(1)}%)</span>`;
-        gainEl.innerHTML = (totalGain >= 0 ? '+' : '') + fmtMoney(totalGain) + lifetimePctText;
-        gainEl.className = 'stat-value ' + (totalGain >= 0 ? 'text-green' : 'text-red');
-
-        const monthlyPL = globalTotals.gainLoss[lastIndex];
-        const plEl = document.getElementById('stat-monthly-pl');
-        
-        let estMonthlyStart = globalTotals.balance[lastIndex] - monthlyPL;
-        let monthlyPct = 0;
-        if (estMonthlyStart !== 0) {
-            monthlyPct = (monthlyPL / estMonthlyStart) * 100;
-        }
-        
-        const monthlyPctText = ` <span style="font-size:0.6em; opacity:0.8">(${monthlyPct >= 0 ? '+' : ''}${monthlyPct.toFixed(1)}%)</span>`;
-        plEl.innerHTML = (monthlyPL >= 0 ? '+' : '') + fmtMoney(monthlyPL) + monthlyPctText;
-        plEl.className = 'stat-value ' + (monthlyPL >= 0 ? 'text-green' : 'text-red');
-
-        const lastIncome = globalTotals.income[lastIndex];
-        const lastDeposits = globalTotals.deposits[lastIndex];
-        const totalInflow = lastIncome + lastDeposits;
-        
-        document.getElementById('stat-monthly-inflow').innerText = fmtMoney(totalInflow);
-        document.getElementById('stat-monthly-inflow-sub').innerHTML = `Income: ${fmtMoney(lastIncome)} <span style="margin:0 4px; color:#ccc">|</span> Net Dep: ${fmtMoney(lastDeposits)}`;
-
-        let investmentInflow = 0;
-        if (lastIndex > 0) {
-            const baselineMonth = sortedMonths[lastIndex - 1]; 
-            accounts.forEach(acc => {
-                if (acc.id === 'vanguardA' || acc.id === 'vanguardB' || acc.id === 'fidelity') {
-                    const entry = alignedData[acc.id].find(d => d.key === baselineMonth);
-                    if (entry) {
-                        investmentInflow += entry.deposits + entry.income;
-                    }
-                }
-            });
-        } else {
-            investmentInflow = totalInflow; 
-        }
-        
-        // STORE GLOBAL STATE FOR INSTANT RECALC
-        g_lastBalance = globalTotals.balance[lastIndex];
-        g_lastInflow = investmentInflow;
-        g_lastDateStr = sortedMonths[lastIndex];
-
-        renderProjectionChart(globalTotals.balance[lastIndex], investmentInflow, sortedMonths[lastIndex], isSilent);
-
-        const stackedDatasets = accounts.map((acc, index) => {
-            const color = palette[index % palette.length];
-            return {
-                label: acc.name,
-                data: alignedData[acc.id].map(d => d.balance),
-                backgroundColor: color + '88', borderColor: color, borderWidth: 1, fill: true, tension: 0.2
-            };
-        });
-        
-        createSnapshotTable(accounts, alignedData, lastIndex, 'snapshotBody', 'currentSnapshotHeader', sortedMonths[lastIndex]);
-        createSnapshotTable(accounts, alignedData, lastIndex - 1, 'prevSnapshotBody', 'prevSnapshotHeader', sortedMonths[lastIndex-1]);
-        
-        renderWellsFargoWidget(accounts, isSilent);
-
-        initIncomeAnalysis(accounts);
-        updateIncomeAnalysis(isSilent);
-
-        const allocation = {};
-        accounts.forEach(acc => {
-            const latest = alignedData[acc.id][lastIndex];
-            if (latest.balance > 0) {
-                // Check override
-                const override = accountOverrides[acc.id];
-                const ticker = override && override.ticker ? override.ticker : latest.invested;
-                allocation[ticker] = (allocation[ticker] || 0) + latest.balance;
-            }
-        });
-        const allocLabels = Object.keys(allocation);
-        const allocValues = Object.values(allocation);
-        const totalPortfolio = allocValues.reduce((a, b) => a + b, 0);
-
-        if (charts.allocation) charts.allocation.destroy();
-        charts.allocation = new Chart(document.getElementById('allocationChart'), {
-            type: 'doughnut', plugins: [ChartDataLabels],
-            data: { 
-                labels: allocLabels, 
-                datasets: [{ 
-                    data: allocValues, 
-                    backgroundColor: palette.map(c => c + '88'), 
-                    borderColor: palette, 
-                    borderWidth: 1
-                }] 
-            },
-            options: { 
-                animation: isSilent ? false : {}, 
-                maintainAspectRatio: false, layout: { padding: 80 }, plugins: { legend: { display: false }, tooltip: { callbacks: { label: (ctx) => ctx.label + ': ' + fmtMoney(ctx.raw) + ' (' + ((ctx.raw/totalPortfolio)*100).toFixed(1) + '%)' } }, 
-                datalabels: { 
-                    color: '#2c3e50', 
-                    anchor: 'end', 
-                    align: 'end', 
-                    offset: 10, 
-                    formatter: (val, ctx) => {
-                        const pct = ((val/totalPortfolio)*100).toFixed(1) + '%';
-                        return (val/totalPortfolio > 0.01) ? ctx.chart.data.labels[ctx.dataIndex] + '\n' + fmtMoneySimple(val) + '\n(' + pct + ')' : '';
-                    }
-                } 
-            } }
-        });
-
-        // LEGEND PERSISTENCE (BALANCE CHART)
-        let balHidden = [];
-        if (charts.balance) {
-            balHidden = charts.balance.data.datasets.map((d, i) => !charts.balance.isDatasetVisible(i));
-            charts.balance.destroy();
-        }
-
-        const persistentDatasets = stackedDatasets.map((ds, i) => ({
-            ...ds,
-            hidden: balHidden[i] ?? false
-        }));
-
-        charts.balance = new Chart(document.getElementById('balanceChart'), {
-            type: 'line', plugins: [ChartDataLabels],
-            data: { labels: sortedMonths, datasets: persistentDatasets },
-            options: {
-                animation: isSilent ? false : {}, 
-                responsive: true, maintainAspectRatio: false, layout: { padding: { right: isMobile ? 90 : 150 } }, interaction: { mode: 'index', intersect: false },
-                plugins: { legend: { align: isMobile ? 'start' : 'center', position: 'top', labels: { boxWidth: isMobile ? 12 : 40, padding: 10 } }, datalabels: { align: 'right', anchor: 'end', offset: 5, backgroundColor: 'white', borderColor: (ctx) => ctx.dataset.borderColor, borderWidth: 1, borderRadius: 4, padding: isMobile ? 4 : 6, color: 'black', font: { weight: 'bold', size: isMobile ? 9 : 10 }, formatter: (val, ctx) => (ctx.dataIndex === ctx.dataset.data.length - 1 && val > 500) ? ctx.dataset.label + '\n' + fmtMoneySimple(val) : null, display: (ctx) => ctx.dataIndex === ctx.dataset.data.length - 1 } },
-                scales: { y: { beginAtZero: true, stacked: true } }
-            }
-        });
-
-        // ==========================================
-        // SLIDER PERSISTENCE LOGIC
-        // ==========================================
-        const slider = document.getElementById('balanceSlider');
-        let persistedStart = 0;
-        let persistedEnd = sortedMonths.length - 1;
-        let shouldPreserve = false;
-
-        if (slider && slider.noUiSlider) {
-            const currentVals = slider.noUiSlider.get();
-            const currentStartIdx = parseInt(currentVals[0]);
-            const currentEndIdx = parseInt(currentVals[1]);
-            const wasAtRightEdge = (currentEndIdx >= (sortedMonths.length - 2)); 
-
-            persistedStart = currentStartIdx;
-            
-            if (wasAtRightEdge) {
-                persistedEnd = sortedMonths.length - 1; 
-            } else {
-                persistedEnd = currentEndIdx; 
-            }
-            
-            if(persistedStart < 0) persistedStart = 0;
-            if(persistedEnd >= sortedMonths.length) persistedEnd = sortedMonths.length - 1;
-            
-            shouldPreserve = true;
-            slider.noUiSlider.destroy();
-        }
-
-        noUiSlider.create(slider, {
-            start: shouldPreserve ? [persistedStart, persistedEnd] : [0, sortedMonths.length - 1], 
-            connect: true,
-            range: {
-                'min': 0,
-                'max': sortedMonths.length - 1
-            },
-            step: 1, 
-            tooltips: {
-                to: (val) => sortedMonths[Math.round(val)],
-                from: (val) => val
-            }
-        });
-
-        slider.noUiSlider.on('update', function (values, handle) {
-            const minIdx = Math.round(values[0]);
-            const maxIdx = Math.round(values[1]);
-            
-            charts.balance.options.scales.x.min = sortedMonths[minIdx];
-            charts.balance.options.scales.x.max = sortedMonths[maxIdx];
-            charts.balance.update();
-        });
-
-        const cGreen = palette[2];
-        const cRed = palette[5];
-
-        if (charts.pl) charts.pl.destroy();
-        charts.pl = new Chart(document.getElementById('plChart'), {
-            type: 'bar',
-            data: { 
-                labels: sortedMonths, 
-                datasets: [{ 
-                    label: 'Monthly Net Gain/Loss', 
-                    data: globalTotals.gainLoss, 
-                    backgroundColor: globalTotals.gainLoss.map(v => v >= 0 ? cGreen + '88' : cRed + '88'),
-                    borderColor: globalTotals.gainLoss.map(v => v >= 0 ? cGreen : cRed),
-                    borderWidth: 1
-                }] 
-            },
-            options: { 
-                animation: isSilent ? false : {}, 
-                responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { grid: { color: '#f0f0f0' } }, x: { grid: { display: false } } } 
-            }
-        });
-        
-        // --- YEARLY CHART RENDER ---
-        if (charts.yearly) charts.yearly.destroy();
-        charts.yearly = new Chart(document.getElementById('yearlyReturnChart'), {
-            type: 'bar',
-            plugins: [ChartDataLabels],
-            data: { 
-                labels: yearlyLabels, 
-                datasets: [{ 
-                    label: 'Yearly Return %', 
-                    data: yearlyReturns, 
-                    backgroundColor: yearlyReturns.map(v => v >= 0 ? cGreen + '88' : cRed + '88'),
-                    borderColor: yearlyReturns.map(v => v >= 0 ? cGreen : cRed),
-                    borderWidth: 1,
-                    borderRadius: 4
-                }] 
-            },
-            options: { 
-                animation: isSilent ? false : {}, 
-                responsive: true, maintainAspectRatio: false, 
-                plugins: { 
-                    legend: { display: false },
-                    datalabels: {
-                        color: '#2c3e50',
-                        anchor: 'end', 
-                        align: 'end', 
-                        offset: -5,
-                        font: { weight: 'bold', size: 9 }, // UPDATED FONT SIZE
-                        formatter: (val) => val.toFixed(1) + '%'
-                    }
-                }, 
-                scales: { 
-                    y: { 
-                        grid: { color: '#f0f0f0' },
-                        ticks: { callback: (val) => val + '%', font: { size: 9 } }
-                    }, 
-                    x: { grid: { display: false }, ticks: { font: { size: 9 } } } 
-                } 
             }
         });
 
