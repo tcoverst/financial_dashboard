@@ -85,24 +85,6 @@
             filter: drop-shadow(0 0 5px rgba(255,255,255,0.1));
         }
 
-        /* Highlight Vested Stocks */
-        .vested-row td {
-            background: rgba(46, 204, 113, 0.1) !important;
-            border-top: 1px solid var(--success) !important;
-            border-bottom: 1px solid var(--success) !important;
-        }
-        .vested-badge {
-            font-size: 0.6em;
-            background: var(--success);
-            color: black;
-            padding: 1px 4px;
-            border-radius: 3px;
-            margin-left: 5px;
-            text-transform: uppercase;
-            font-weight: bold;
-            vertical-align: middle;
-        }
-
         /* =========================================
            GLOBAL STRUCTURAL STYLES
            ========================================= */
@@ -213,11 +195,66 @@
         #salary-trend-container { height: 420px; }
 
         .table-responsive { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
-        table { width: 100%; border-collapse: collapse; font-size: 0.9em; }
-        th, td { padding: 8px 10px; text-align: right; border-bottom: 1px solid var(--border-color); white-space: nowrap; }
+        
+        /* SCROLLABLE TABLE OVERRIDES FOR WATCHLIST */
+        .watchlist-scroll-container {
+            width: 100%; 
+            overflow-x: auto;
+            position: relative;
+        }
+
+        table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 0.9em; }
+        
+        th, td { 
+            padding: 8px 10px; 
+            text-align: right; 
+            border-bottom: 1px solid var(--border-color); 
+            white-space: nowrap;
+            background-color: transparent;
+        }
+        
+        /* Sticky Column Logic */
+        .sticky-col {
+            position: sticky;
+            left: 0;
+            z-index: 2;
+            background-color: var(--card-bg); /* Opaque background to cover scrolling content */
+            border-right: 1px solid var(--border-color);
+        }
+        .sticky-col-2 {
+            position: sticky;
+            left: 70px; /* Adjust based on approx width of first col */
+            z-index: 2;
+            background-color: var(--card-bg);
+            border-right: 2px solid var(--border-color); /* Stronger separator */
+        }
+        
+        /* Specific header backgrounds */
+        th.sticky-col, th.sticky-col-2 {
+            background-color: var(--th-bg); 
+            z-index: 3; /* Headers on top of everything */
+        }
+
         th:first-child, td:first-child { text-align: left; }
         th { background-color: var(--th-bg); color: var(--primary); text-transform: uppercase; font-size: 0.75em; letter-spacing: 1px; font-weight: 600; }
-        tr:hover { background-color: var(--hover-bg); }
+        tr:hover td { background-color: var(--hover-bg); }
+        
+        /* Highlight Vested Rows */
+        @keyframes pulse-gold { 0% { border-color: #f1c40f; } 50% { border-color: #e67e22; } 100% { border-color: #f1c40f; } }
+        
+        tr.vested-row td {
+            background-color: rgba(241, 196, 15, 0.08) !important;
+            color: var(--text);
+        }
+        tr.vested-row td.sticky-col, tr.vested-row td.sticky-col-2 {
+             background-color: var(--card-bg) !important; /* Keep sticky bg opaque but maybe add tint? */
+             border-bottom: 1px solid rgba(241, 196, 15, 0.3);
+        }
+        /* Create a pseudo border for the whole row or just highlight text */
+        tr.vested-row td:first-child {
+            border-left: 3px solid #f1c40f;
+        }
+
         .table-compact th, .table-compact td { padding: 5px 6px; font-size: 0.85em; }
 
         .ticker-tag { background: rgba(41, 128, 185, 0.1); color: #2980b9; padding: 2px 6px; border-radius: 4px; font-size: 0.85em; font-weight: 600; display: inline-block; }
@@ -246,7 +283,6 @@
         .btn-active { background: var(--goal) !important; color: white !important; border-color: var(--goal) !important; }
 
         .watchlist-split { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-        .watchlist-col { overflow: hidden; } /* Contain the scrollable table */
         .watchlist-col h4 { margin: 0 0 10px 0; font-size: 0.9em; text-transform: uppercase; letter-spacing: 1px; border-bottom: 2px solid; padding-bottom: 5px; }
         .watchlist-col.gainers h4 { color: var(--success); border-color: var(--success); }
         .watchlist-col.losers h4 { color: var(--danger); border-color: var(--danger); }
@@ -320,6 +356,7 @@
             select#extrapolationRateSelect { max-width: 100%; font-size: 0.8em; }
             .breakdown-grid { grid-template-columns: 1fr; }
             .watchlist-split { grid-template-columns: 1fr; }
+            .sticky-col-2 { left: 60px; }
         }
     </style>
 </head>
@@ -339,7 +376,7 @@
         <button class="refresh-btn" onclick="manualRefresh()" id="manual-refresh-btn" style="margin:0;">
             <span>↻</span> Update
         </button>
-        <div id="refresh-timer" style="font-size: 0.75em; color: #999;">--</div>
+        <div id="refresh-timer" style="font-size: 0.75em; color: #999;">Updates in 60s</div>
     </div>
 </div>
 
@@ -386,9 +423,9 @@
     </div>
     
     <div class="charts-row">
-        <div class="card">
+        <div class="card" style="overflow:hidden;">
             <h3>Live Market Watch</h3>
-            <div class="subtitle" style="margin-bottom:15px">Sorted by Day Change</div>
+            <div class="subtitle" style="margin-bottom:15px">Current Positions Highlighted • Scroll for History</div>
             
             <div class="watchlist-controls">
                 <input type="text" id="new-ticker-input" class="watchlist-input" placeholder="Symbol (e.g. NVDA)">
@@ -399,12 +436,12 @@
             <div class="watchlist-split">
                 <div class="watchlist-col gainers">
                     <h4>Top Gainers</h4>
-                    <div class="table-responsive" style="max-height: 400px;">
+                    <div class="watchlist-scroll-container" style="max-height: 400px;">
                         <table class="table-compact">
                             <thead>
                                 <tr>
-                                    <th style="text-align:left">Ticker</th>
-                                    <th style="text-align:right">Price</th>
+                                    <th class="sticky-col" style="text-align:left; min-width:70px;">Ticker</th>
+                                    <th class="sticky-col-2" style="text-align:right; min-width:80px;">Price</th>
                                     <th style="text-align:right">% 1D</th>
                                     <th style="text-align:right">% 1W</th>
                                     <th style="text-align:right">% 1M</th>
@@ -424,12 +461,12 @@
 
                 <div class="watchlist-col losers">
                     <h4>Top Losers</h4>
-                    <div class="table-responsive" style="max-height: 400px;">
+                    <div class="watchlist-scroll-container" style="max-height: 400px;">
                         <table class="table-compact">
                             <thead>
                                 <tr>
-                                    <th style="text-align:left">Ticker</th>
-                                    <th style="text-align:right">Price</th>
+                                    <th class="sticky-col" style="text-align:left; min-width:70px;">Ticker</th>
+                                    <th class="sticky-col-2" style="text-align:right; min-width:80px;">Price</th>
                                     <th style="text-align:right">% 1D</th>
                                     <th style="text-align:right">% 1W</th>
                                     <th style="text-align:right">% 1M</th>
@@ -882,6 +919,9 @@
     // WATCHLIST & CONFIG
     let userWatchlist = JSON.parse(localStorage.getItem('userWatchlist')) || ['VIGIX', 'VTSAX', 'GOOGL', 'TSLA', 'NVDA', 'BND'];
     let accountOverrides = JSON.parse(localStorage.getItem('accountOverrides')) || {};
+    
+    // NEW: TRACK VESTED STOCKS
+    let vestedTickers = new Set();
 
     // TRENDING CONSTANTS
     const redditTrending = ['NVDA', 'TSLA', 'PLTR', 'GME', 'AMD', 'AAPL', 'MSFT', 'AMZN', 'COIN', 'MSTR'];
@@ -981,7 +1021,8 @@
     let charts = {};
     let watchlistDataStore = [];
 
-    let refreshTimer = 0;
+    let refreshInterval = null;
+    let refreshTimer = 60;
     let isUpdating = false;
 
     // ==========================================
@@ -1017,26 +1058,6 @@
         let months = targetDate.getMonth() - now.getMonth();
         if (months < 0) { years--; months += 12; }
         return `${years} Years, ${months} Months remaining`;
-    }
-    
-    function getHeldTickers() {
-        const held = new Set();
-        if(globalAccountsData) {
-            globalAccountsData.forEach(acc => {
-                // Check override
-                if(accountOverrides[acc.id] && accountOverrides[acc.id].ticker) {
-                    held.add(accountOverrides[acc.id].ticker);
-                } else if(acc.data && acc.data.length > 0) {
-                     // Get latest invested
-                     const last = acc.data[acc.data.length-1];
-                     if(last && last.invested && last.invested !== 'Unknown') {
-                         const mapped = TICKER_MAP[last.invested] || last.invested.split(' ')[0];
-                         held.add(mapped);
-                     }
-                }
-            });
-        }
-        return held;
     }
 
     // ==========================================
@@ -1151,8 +1172,21 @@
     // ==========================================
     // LOGIC: REAL-TIME MARKET DATA (UPDATED)
     // ==========================================
+    
+    // HELPER: Find close price N days ago
+    function getPriceAtOffset(closes, timestamps, targetDate) {
+        let price = null;
+        for (let i = timestamps.length - 1; i >= 0; i--) {
+            const d = new Date(timestamps[i] * 1000);
+            if (d <= targetDate && closes[i] !== null) {
+                price = closes[i];
+                break;
+            }
+        }
+        return price;
+    }
 
-    async function getMarketPerformance(ticker) {
+    async function getStockPerformance(ticker) {
         if (!ticker || ticker === 'Unknown' || ticker === '-') return null;
         const cleanTicker = TICKER_MAP[ticker] || ticker.split(' ')[0]; 
 
@@ -1164,7 +1198,7 @@
 
         const cacheBuster = `&_=${new Date().getTime()}`;
         
-        // FETCH MAX DATA FOR 1D, 1W, 1M, 3M, 6M, 1Y, 3Y, 5Y, MAX
+        // UPGRADE: Fetch 'max' range to compute all stats
         const targetUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${cleanTicker}?range=max&interval=1d${cacheBuster}`;
 
         for (const proxy of proxies) {
@@ -1183,77 +1217,79 @@
 
                 if (!closes || closes.length === 0) continue;
                 
-                // --- HELPER TO FIND CLOSE PRICE X DAYS AGO ---
-                // We map timestamps to prices
-                const priceMap = [];
-                for(let i=0; i<timestamps.length; i++) {
-                    if(closes[i] !== null) {
-                        priceMap.push({ date: new Date(timestamps[i]*1000), price: closes[i] });
+                // Current Price
+                let currentPrice = null;
+                let lastIndex = -1;
+                for (let i = closes.length - 1; i >= 0; i--) {
+                    if (closes[i] !== null) { 
+                        currentPrice = closes[i]; 
+                        lastIndex = i;
+                        break; 
                     }
                 }
                 
-                if (priceMap.length === 0) continue;
-
-                const currentPrice = priceMap[priceMap.length - 1].price;
-                const currentTs = priceMap[priceMap.length - 1].date;
-
-                const getPriceAgo = (targetDate) => {
-                    // Find closest date <= targetDate
-                    for (let i = priceMap.length - 1; i >= 0; i--) {
-                        if (priceMap[i].date <= targetDate) {
-                            return priceMap[i].price;
-                        }
-                    }
-                    return priceMap[0].price; // Fallback to earliest
-                };
-
-                const calcChange = (msAgo) => {
-                    if (msAgo === 'MAX') {
-                        const start = priceMap[0].price;
-                        return (currentPrice - start) / start;
-                    }
-                    const target = new Date(currentTs.getTime() - msAgo);
-                    const oldPrice = getPriceAgo(target);
-                    return (currentPrice - oldPrice) / oldPrice;
-                };
-
-                // Time constants in ms
-                const ONE_DAY = 24 * 60 * 60 * 1000;
-                const ONE_WEEK = 7 * ONE_DAY;
-                const ONE_MONTH = 30 * ONE_DAY;
-                const THREE_MONTHS = 90 * ONE_DAY;
-                const SIX_MONTHS = 180 * ONE_DAY;
-                const ONE_YEAR = 365 * ONE_DAY;
-                const THREE_YEARS = 3 * ONE_YEAR;
-                const FIVE_YEARS = 5 * ONE_YEAR;
-
-                // Month-To-Date Calculation (for Account Logic)
-                const startOfCurrentMonth = new Date(currentTs.getFullYear(), currentTs.getMonth(), 1);
-                const mtdBaseline = getPriceAgo(startOfCurrentMonth);
-                const mtdRate = (currentPrice - mtdBaseline) / mtdBaseline;
+                if (!currentPrice) continue;
                 
-                // Previous Day Close (Strictly the close before current)
-                let prevClose = quote.meta.chartPreviousClose; 
-                if(!prevClose && priceMap.length > 1) prevClose = priceMap[priceMap.length-2].price;
+                // DATA POINT: MTD BASELINE (Start of Current Month)
+                const now = new Date();
+                const startOfCurrentMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+                const baselinePrice = getPriceAtOffset(closes, timestamps, startOfCurrentMonth);
 
-                const dayRate = prevClose ? (currentPrice - prevClose) / prevClose : 0;
+                // DATA POINTS: HISTORICAL OFFSETS
+                // 1D (Prev Close), 1W, 1M, 3M, 6M, 1Y, 3Y, 5Y, Max
+                
+                // Prev Close (Robust check)
+                let prevClose = null;
+                if (lastIndex > 0) {
+                     for (let j = lastIndex - 1; j >= 0; j--) {
+                         if (closes[j] !== null) { prevClose = closes[j]; break; }
+                     }
+                }
+                if(!prevClose) prevClose = quote.meta.chartPreviousClose;
+                
+                const dayRate = (prevClose && currentPrice) ? (currentPrice - prevClose) / prevClose : 0;
+                
+                const getDateAgo = (days) => {
+                    const d = new Date();
+                    d.setDate(d.getDate() - days);
+                    return d;
+                };
+
+                const p1w = getPriceAtOffset(closes, timestamps, getDateAgo(7));
+                const p1m = getPriceAtOffset(closes, timestamps, getDateAgo(30));
+                const p3m = getPriceAtOffset(closes, timestamps, getDateAgo(90));
+                const p6m = getPriceAtOffset(closes, timestamps, getDateAgo(180));
+                const p1y = getPriceAtOffset(closes, timestamps, getDateAgo(365));
+                const p3y = getPriceAtOffset(closes, timestamps, getDateAgo(365*3));
+                const p5y = getPriceAtOffset(closes, timestamps, getDateAgo(365*5));
+                
+                // Find first valid close for MAX
+                let pMax = null;
+                for(let k=0; k < closes.length; k++) {
+                    if(closes[k] !== null) { pMax = closes[k]; break; }
+                }
+
+                const calcRate = (base) => (base && currentPrice) ? (currentPrice - base) / base : null;
+
+                const lastTimestamp = timestamps[timestamps.length - 1];
 
                 return { 
                     price: currentPrice,
                     prevClose: prevClose,
-                    mtdRate: mtdRate,
+                    mtdRate: (baselinePrice && currentPrice) ? (currentPrice - baselinePrice) / baselinePrice : 0, // For Account Balances
+                    
+                    // For Watchlist
                     dayRate: dayRate,
-                    ts: timestamps[timestamps.length-1],
-                    changes: {
-                        '1W': calcChange(ONE_WEEK),
-                        '1M': calcChange(ONE_MONTH),
-                        '3M': calcChange(THREE_MONTHS),
-                        '6M': calcChange(SIX_MONTHS),
-                        '1Y': calcChange(ONE_YEAR),
-                        '3Y': calcChange(THREE_YEARS),
-                        '5Y': calcChange(FIVE_YEARS),
-                        'Max': calcChange('MAX')
-                    }
+                    w1Rate: calcRate(p1w),
+                    m1Rate: calcRate(p1m),
+                    m3Rate: calcRate(p3m),
+                    m6Rate: calcRate(p6m),
+                    y1Rate: calcRate(p1y),
+                    y3Rate: calcRate(p3y),
+                    y5Rate: calcRate(p5y),
+                    maxRate: calcRate(pMax),
+                    
+                    ts: lastTimestamp 
                 };
 
             } catch (e) {
@@ -1286,28 +1322,12 @@
         const currentMonthVal = now.getMonth() + 1; 
         const currentMonthKey = `${currentYear}-${String(currentMonthVal).padStart(2, '0')}`;
         
-        // WATCHLIST FETCH
-        watchlistDataStore = [];
-        try {
-             await Promise.all(userWatchlist.map(async (ticker) => {
-                 const data = await getMarketPerformance(ticker);
-                 if(data) {
-                     watchlistDataStore.push({
-                         ticker: ticker,
-                         price: data.price,
-                         dayChange: data.dayRate,
-                         changes: data.changes
-                     });
-                 } else {
-                      watchlistDataStore.push({ ticker: ticker, price: 0, dayChange: 0, changes:{}, error: true });
-                 }
-             }));
-             renderWatchlistColumns();
-        } catch(e) { console.error("Watchlist Error", e); }
-
-
+        // RESET VESTED TRACKER
+        vestedTickers = new Set();
+        
         // ACCOUNT FETCH
         try {
+            // First, process accounts to populate vestedTickers and account data
             await Promise.all(accounts.map(async (acc) => {
                 if (acc.data.length === 0) return;
                 
@@ -1353,11 +1373,20 @@
                 if(!ticker) {
                     ticker = liveEntry.invested; 
                     if (acc.id.includes('fidelity')) ticker = 'GOOGL';
-                    if (acc.id.includes('boeing')) ticker = 'Boeing (Bonds)';
-                    if (acc.id.includes('wells')) ticker = 'Wells Fargo (Cash)';
+                    if (acc.id.includes('boeing')) ticker = 'BND'; // Corrected map
+                    if (acc.id.includes('wells')) ticker = 'BIL';
+                }
+                
+                // Add to vested list if balance > 0
+                if(baselineEntry.balance > 0) {
+                     vestedTickers.add(ticker);
+                     // Also add the override ticker if it exists
+                     if(override && override.ticker) vestedTickers.add(override.ticker);
+                     // Also add the raw invested ticker just in case
+                     if(liveEntry.invested && liveEntry.invested !== 'Unknown') vestedTickers.add(liveEntry.invested);
                 }
 
-                const marketData = await getMarketPerformance(ticker);
+                const marketData = await getStockPerformance(ticker);
                 
                 if (marketData === null) {
                     liveEntry.isError = true;
@@ -1375,7 +1404,7 @@
                     if(override && override.qty) {
                          liveEntry.balance = marketData.price * override.qty;
                          liveEntry.marketGain = liveEntry.balance - liveEntry.deposits - liveEntry.income - baselineEntry.balance; 
-                         liveEntry.cumulative = baselineEntry.cumulative + liveEntry.marketGain + liveEntry.income; // Approx
+                         liveEntry.cumulative = baselineEntry.cumulative + liveEntry.marketGain + liveEntry.income; 
                     }
                 }
 
@@ -1383,20 +1412,49 @@
                     acc.data.push(liveEntry);
                 }
             }));
+            
+            // ENSURE WATCHLIST HAS ALL VESTED TICKERS
+            vestedTickers.forEach(vt => {
+                if(vt && vt !== 'Unknown' && !userWatchlist.includes(vt) && vt !== '-' && vt !== 'BIL') { // Exclude cash equivalents if desired, here I keep them except BIL/Cash logic if wanted
+                     userWatchlist.push(vt);
+                }
+            });
+            localStorage.setItem('userWatchlist', JSON.stringify(userWatchlist));
+
+            // NOW FETCH WATCHLIST (After Vested Tickers are added)
+            watchlistDataStore = [];
+             await Promise.all(userWatchlist.map(async (ticker) => {
+                 const data = await getStockPerformance(ticker);
+                 if(data) {
+                     watchlistDataStore.push({
+                         ticker: ticker,
+                         price: data.price,
+                         dayChange: data.dayRate,
+                         // Expanded Data
+                         w1: data.w1Rate,
+                         m1: data.m1Rate,
+                         m3: data.m3Rate,
+                         m6: data.m6Rate,
+                         y1: data.y1Rate,
+                         y3: data.y3Rate,
+                         y5: data.y5Rate,
+                         max: data.maxRate
+                     });
+                 } else {
+                      watchlistDataStore.push({ ticker: ticker, price: 0, dayChange: 0, error: true });
+                 }
+             }));
+             renderWatchlistColumns();
+
         } catch (e) {
             console.error(e);
         } finally {
             isUpdating = false;
             if(btn) btn.innerHTML = "<span>↻</span> Update";
-            
-            // CHAIN NEXT UPDATE - AS SOON AS READY
-            scheduleNextUpdate();
         }
     }
     
     function renderWatchlistColumns() {
-        const heldTickers = getHeldTickers();
-
         // Filter into two arrays
         const gainers = watchlistDataStore.filter(i => i.dayChange >= 0).sort((a,b) => b.dayChange - a.dayChange);
         const losers = watchlistDataStore.filter(i => i.dayChange < 0).sort((a,b) => a.dayChange - b.dayChange); // Worst first
@@ -1406,41 +1464,46 @@
             body.innerHTML = '';
             items.forEach(item => {
                 const tr = document.createElement('tr');
-                const isHeld = heldTickers.has(item.ticker);
                 
-                if(isHeld) tr.classList.add('vested-row');
-                
-                const dayColor = item.dayChange >= 0 ? 'text-green' : 'text-red';
-                const daySign = item.dayChange >= 0 ? '+' : '';
-                const dayPct = (item.dayChange * 100).toFixed(2) + '%';
-                
-                const fmtCell = (val) => {
-                    if(val === undefined || isNaN(val)) return '-';
-                    const c = val >= 0 ? 'text-green' : 'text-red';
-                    const s = val >= 0 ? '+' : '';
-                    return `<span class="${c}">${s}${(val*100).toFixed(1)}%</span>`;
+                // CHECK IF VESTED
+                if(vestedTickers.has(item.ticker)) {
+                    tr.classList.add('vested-row');
+                }
+
+                const formatCell = (val) => {
+                    if (val === null || val === undefined) return '<span style="color:#777">-</span>';
+                    const colorClass = val >= 0 ? 'text-green' : 'text-red';
+                    const sign = val >= 0 ? '+' : '';
+                    const pct = (val * 100).toFixed(2) + '%';
+                    return `<span class="${colorClass}">${sign}${pct}</span>`;
                 };
                 
-                let badge = isHeld ? `<span class="vested-badge">HELD</span>` : '';
+                // Sticky Columns
+                const tickerCell = `<td class="sticky-col" style="font-weight:bold">${item.ticker}</td>`;
+                const priceCell = `<td class="sticky-col-2" style="font-weight:bold">${fmtMoney(item.price)}</td>`;
+                
+                // Scrollable Columns
+                const dataCells = `
+                    <td>${formatCell(item.dayChange)}</td>
+                    <td>${formatCell(item.w1)}</td>
+                    <td>${formatCell(item.m1)}</td>
+                    <td>${formatCell(item.m3)}</td>
+                    <td>${formatCell(item.m6)}</td>
+                    <td>${formatCell(item.y1)}</td>
+                    <td>${formatCell(item.y3)}</td>
+                    <td>${formatCell(item.y5)}</td>
+                    <td>${formatCell(item.max)}</td>
+                `;
 
-                tr.innerHTML = `
-                    <td style="font-weight:bold; white-space:nowrap;">${item.ticker}${badge}</td>
-                    <td>${fmtMoney(item.price)}</td>
-                    <td class="${dayColor}">${daySign}${dayPct}</td>
-                    <td>${fmtCell(item.changes?.['1W'])}</td>
-                    <td>${fmtCell(item.changes?.['1M'])}</td>
-                    <td>${fmtCell(item.changes?.['3M'])}</td>
-                    <td>${fmtCell(item.changes?.['6M'])}</td>
-                    <td>${fmtCell(item.changes?.['1Y'])}</td>
-                    <td>${fmtCell(item.changes?.['3Y'])}</td>
-                    <td>${fmtCell(item.changes?.['5Y'])}</td>
-                    <td>${fmtCell(item.changes?.['Max'])}</td>
+                const btnCell = `
                     <td style="text-align:center">
                         <button onclick="removeTicker('${item.ticker}')" style="background:transparent; border:none; color:var(--text); opacity:0.5; cursor:pointer;" title="Remove">
                             <i class="fas fa-times"></i>
                         </button>
                     </td>
                 `;
+                
+                tr.innerHTML = tickerCell + priceCell + dataCells + btnCell;
                 body.appendChild(tr);
             });
         };
@@ -1453,6 +1516,8 @@
         if(isUpdating) return;
         await updateWithLiveMarketData(globalAccountsData, true);
         processAndRender(globalAccountsData, true);
+        const isMarket = isMarketOpen();
+        refreshTimer = isMarket ? 10 : 60;
     }
 
     // ==========================================
@@ -1983,7 +2048,7 @@
             document.getElementById('loading').style.opacity = '0';
             setTimeout(() => { document.getElementById('loading').style.display = 'none'; }, 300);
 
-            scheduleNextUpdate();
+            startAutoRefresh();
 
         } catch (error) {
             console.error(error);
@@ -2009,17 +2074,28 @@
         return minutesOfDay >= start && minutesOfDay < end;
     }
 
-    // CHANGED: No longer setInterval, but recursive setTimeout chain
-    function scheduleNextUpdate() {
+    function startAutoRefresh() {
         let isMarket = isMarketOpen();
-        let delay = isMarket ? 1000 : 5000; // 1s if market open, 5s if closed (just in case)
-        
-        setTimeout(() => {
-             console.log("Triggering continuous market update...");
-             updateWithLiveMarketData(globalAccountsData, true).then(() => {
-                 processAndRender(globalAccountsData, true);
-             });
-        }, delay);
+        refreshTimer = isMarket ? 10 : 60;
+
+        setInterval(() => {
+            refreshTimer--;
+            
+            const currentMarketStatus = isMarketOpen();
+            if (currentMarketStatus !== isMarket) {
+                isMarket = currentMarketStatus;
+            }
+            
+            if (refreshTimer <= 0) {
+                console.log("Auto-Refreshing Market Data...");
+                updateWithLiveMarketData(globalAccountsData, true); 
+                processAndRender(globalAccountsData, true); 
+                
+                refreshTimer = isMarket ? 10 : 60;
+            }
+            
+            document.getElementById('refresh-timer').innerText = `Updates in ${refreshTimer}s`;
+        }, 1000);
     }
 
     function createSnapshotTable(accounts, alignedData, index, tableId, headerId, monthKey) {
