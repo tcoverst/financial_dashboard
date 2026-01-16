@@ -220,9 +220,20 @@
         tr:hover { background-color: var(--hover-bg); }
         .table-compact th, .table-compact td { padding: 5px 6px; font-size: 0.85em; }
 
-        /* Sticky Columns for Live Watch */
-        .sticky-col-1 { position: sticky; left: 0; z-index: 10; background: var(--card-bg); border-right: 1px solid var(--border-color); }
-        .sticky-col-2 { position: sticky; left: 80px; z-index: 10; background: var(--card-bg); border-right: 2px solid var(--border-color); }
+        /* Sticky Columns for Live Watch - Fixed Widths to prevent scroll jumps */
+        .sticky-col-1 { 
+            position: sticky; left: 0; z-index: 10; 
+            background: var(--card-bg); 
+            border-right: 1px solid var(--border-color);
+            width: 80px; min-width: 80px; max-width: 80px;
+            overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        }
+        .sticky-col-2 { 
+            position: sticky; left: 80px; z-index: 10; 
+            background: var(--card-bg); 
+            border-right: 2px solid var(--border-color);
+            width: 90px; min-width: 90px; max-width: 90px;
+        }
         
         /* Adjust background for sticky columns in dark mode to prevent transparency issues */
         body.sci-fi-mode .sticky-col-1, body.sci-fi-mode .sticky-col-2 { background: #1a1a1a; }
@@ -253,8 +264,8 @@
         .btn-small:hover { background: var(--primary); color: var(--bg); }
         .btn-active { background: var(--goal) !important; color: white !important; border-color: var(--goal) !important; }
 
-        /* FIXED: Use minmax(0,1fr) to force equal split even with overflow content */
-        .watchlist-split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; }
+        /* FIXED: Use minmax(50%, 1fr) to force equal split even with overflow content */
+        .watchlist-split { display: grid; grid-template-columns: minmax(50%, 1fr) minmax(50%, 1fr); gap: 20px; }
         
         .watchlist-col h4 { margin: 0 0 10px 0; font-size: 0.9em; text-transform: uppercase; letter-spacing: 1px; border-bottom: 2px solid; padding-bottom: 5px; }
         .watchlist-col.gainers h4 { color: var(--success); border-color: var(--success); }
@@ -331,7 +342,7 @@
             .watchlist-split { grid-template-columns: 1fr; }
             
             /* Sticky tweak for mobile */
-            .sticky-col-2 { left: 70px; }
+            .sticky-col-2 { left: 80px; }
         }
     </style>
 </head>
@@ -415,8 +426,8 @@
                         <table class="table-compact">
                             <thead>
                                 <tr>
-                                    <th class="sticky-col-1" style="text-align:left; min-width:80px;">Ticker</th>
-                                    <th class="sticky-col-2" style="text-align:right; min-width:90px;">Price</th>
+                                    <th class="sticky-col-1">Ticker</th>
+                                    <th class="sticky-col-2">Price</th>
                                     <th style="min-width:65px; text-align:right">% 1D</th>
                                     <th style="min-width:65px; text-align:right">% 1W</th>
                                     <th style="min-width:65px; text-align:right">% 1M</th>
@@ -440,8 +451,8 @@
                         <table class="table-compact">
                             <thead>
                                 <tr>
-                                    <th class="sticky-col-1" style="text-align:left; min-width:80px;">Ticker</th>
-                                    <th class="sticky-col-2" style="text-align:right; min-width:90px;">Price</th>
+                                    <th class="sticky-col-1">Ticker</th>
+                                    <th class="sticky-col-2">Price</th>
                                     <th style="min-width:65px; text-align:right">% 1D</th>
                                     <th style="min-width:65px; text-align:right">% 1W</th>
                                     <th style="min-width:65px; text-align:right">% 1M</th>
@@ -1145,7 +1156,7 @@
     // LOGIC: REAL-TIME MARKET DATA (UPDATED)
     // ==========================================
 
-    // UPDATED FUNCTION: Uses META data for accurate Live & Day Change prices
+    // UPDATED FUNCTION: Uses Array-Based Logic Priority to avoid Metadata errors
     async function getExtendedPerformance(ticker) {
         if (!ticker || ticker === 'Unknown' || ticker === '-') return null;
         const cleanTicker = TICKER_MAP[ticker] || ticker.split(' ')[0]; 
@@ -1178,25 +1189,28 @@
 
                 if (!closes || closes.length === 0) continue;
 
-                // --- KEY FIX FOR LIVE PRICE & DAY CHANGE ---
-                // We prioritize META data which comes from the dashboard header
-                // regularMarketPrice = Current Live Price (or Closing Price if market closed)
-                // chartPreviousClose = Official Close of previous session
+                // --- ROBUST PRICING LOGIC ---
+                // Filter out nulls to avoid index errors
+                const validCloses = closes.filter(c => c !== null);
+                if (validCloses.length < 2) continue;
+
+                // 1. Current Price: Prioritize Metadata (Real-time), Fallback to Last Array Item
+                const currentPrice = meta.regularMarketPrice || validCloses[validCloses.length - 1];
                 
-                let currentPrice = meta.regularMarketPrice;
-                let prevClose = meta.chartPreviousClose || meta.previousClose;
+                // 2. Previous Close: Prioritize Metadata, Fallback to 2nd Last Array Item (Yesterday)
+                // This fixes both the 0% bug (comparing today to today) and the massive % bug (dividing by zero/null)
+                let prevClose = meta.chartPreviousClose;
                 
-                // --- HISTORY LOGIC ---
-                // We still need the array for finding Last Week, Last Month, etc.
-                let lastIndex = -1;
-                for (let i = closes.length - 1; i >= 0; i--) {
-                    if (closes[i] !== null) { 
-                        if(!currentPrice) currentPrice = closes[i]; // Fallback
-                        lastIndex = i;
-                        break; 
-                    }
+                if (!prevClose || prevClose === 0) {
+                     prevClose = meta.previousClose;
                 }
-                const lastTimestamp = timestamps[lastIndex];
+                
+                // Final fallback: Use the confirmed close of the *previous* candle
+                if (!prevClose || prevClose === 0) {
+                    prevClose = validCloses[validCloses.length - 2];
+                }
+
+                const lastTimestamp = timestamps[timestamps.length - 1];
                 const lastDate = new Date(lastTimestamp * 1000);
 
                 // Helper to find price N days/months ago
@@ -1206,15 +1220,17 @@
                     if (mode === 'months') targetDate.setMonth(targetDate.getMonth() - amt);
                     if (mode === 'years') targetDate.setFullYear(targetDate.getFullYear() - amt);
                     
-                    for (let i = lastIndex; i >= 0; i--) {
+                    let bestPrice = null;
+                    // Find closest timestamp without going future
+                    for (let i = timestamps.length - 1; i >= 0; i--) {
                         if (timestamps[i] <= targetDate.getTime() / 1000 && closes[i] !== null) {
                             return closes[i];
                         }
                     }
-                    return closes.find(c => c !== null); // fallback to earliest
+                    return validCloses[0]; // fallback to earliest
                 };
 
-                // Calculate Month To Date Baseline (For Account Value)
+                // Calculate Month To Date Baseline
                 const now = new Date();
                 const startOfCurrentMonth = new Date(now.getFullYear(), now.getMonth(), 1);
                 let mtdBaseline = null;
@@ -1223,38 +1239,11 @@
                         mtdBaseline = closes[i]; break;
                     }
                 }
-                
-                // --- ROBUST 1D CHANGE LOGIC ---
-                // The issue: range=max sometimes gives 'chartPreviousClose' as the start of the chart (years ago).
-                // We sanity check meta.previousClose. If it's absurdly small or missing, we calculate from history.
-                
+
+                // 1D Change Calculation
                 let p1d = 0;
-                
-                // 1. Try Meta Data first (most accurate for today/yesterday)
-                if(currentPrice && prevClose) {
-                    // Sanity check: If Prev Close is less than 50% of Current Price (and current > 1), it's likely bad data (e.g. IPO price)
-                    if (prevClose > (currentPrice * 0.5) && prevClose < (currentPrice * 1.5)) {
-                         p1d = (currentPrice - prevClose) / prevClose;
-                    } else {
-                        prevClose = null; // Mark as invalid to trigger fallback
-                    }
-                }
-                
-                // 2. Fallback to History Array if Meta failed
-                if (!prevClose || p1d === 0 && lastIndex > 0) {
-                     // Get the valid close before the last one
-                     let penIndex = -1;
-                     for (let j = lastIndex - 1; j >= 0; j--) {
-                         if (closes[j] !== null) { 
-                             prevClose = closes[j]; 
-                             penIndex = j;
-                             break; 
-                         }
-                     }
-                     
-                     if (currentPrice && prevClose) {
-                         p1d = (currentPrice - prevClose) / prevClose;
-                     }
+                if (prevClose && prevClose > 0) {
+                    p1d = (currentPrice - prevClose) / prevClose;
                 }
 
                 return { 
@@ -1262,7 +1251,6 @@
                     ts: lastTimestamp,
                     mtdRate: (mtdBaseline && currentPrice) ? (currentPrice - mtdBaseline) / mtdBaseline : 0,
                     
-                    // METRICS
                     p1d: p1d,
                     
                     p1w: (getPriceAgo(7, 'days') && currentPrice) ? (currentPrice - getPriceAgo(7, 'days')) / getPriceAgo(7, 'days') : 0,
@@ -1272,7 +1260,7 @@
                     p1y: (getPriceAgo(1, 'years') && currentPrice) ? (currentPrice - getPriceAgo(1, 'years')) / getPriceAgo(1, 'years') : 0,
                     p3y: (getPriceAgo(3, 'years') && currentPrice) ? (currentPrice - getPriceAgo(3, 'years')) / getPriceAgo(3, 'years') : 0,
                     p5y: (getPriceAgo(5, 'years') && currentPrice) ? (currentPrice - getPriceAgo(5, 'years')) / getPriceAgo(5, 'years') : 0,
-                    pMax: (closes[0] && currentPrice) ? (currentPrice - closes[0]) / closes[0] : 0
+                    pMax: (validCloses[0] && currentPrice) ? (currentPrice - validCloses[0]) / validCloses[0] : 0
                 };
 
             } catch (e) {
