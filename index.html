@@ -1145,132 +1145,119 @@
     // LOGIC: REAL-TIME MARKET DATA (UPDATED)
     // ==========================================
 
-    // Store historical metrics (1W, 1Y, etc.) separately so we don't re-fetch them constantly
-    let globalMetricsCache = {}; 
-
-    /**
-     * OPTIMIZED: Fetches live data for ALL tickers in ONE request.
-     * drastically reduces network lag and proxy overhead.
-     */
-    async function fetchBatchQuotes(tickers) {
-        if (!tickers || tickers.length === 0) return {};
-        
-        // Deduplicate and clean tickers
-        const uniqueTickers = [...new Set(tickers.map(t => {
-            return TICKER_MAP[t] || t.split(' ')[0];
-        }))];
-
-        const symbolStr = uniqueTickers.join(',');
-        const targetUrl = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${symbolStr}`;
-        
-        // Use the fastest proxy first
-        const proxy = 'https://corsproxy.io/?'; 
-
-        try {
-            const response = await fetch(proxy + encodeURIComponent(targetUrl));
-            if (!response.ok) throw new Error('Network');
-            
-            const data = await response.json();
-            const result = {};
-            
-            if (data.quoteResponse && data.quoteResponse.result) {
-                data.quoteResponse.result.forEach(quote => {
-                    result[quote.symbol] = {
-                        price: quote.regularMarketPrice,
-                        prevClose: quote.regularMarketPreviousClose,
-                        change: quote.regularMarketChange,
-                        changePercent: quote.regularMarketChangePercent / 100, // API returns 5.25 for 5.25%
-                        ts: quote.regularMarketTime
-                    };
-                });
-            }
-            return result;
-        } catch (e) {
-            console.warn("Batch fetch failed", e);
-            return {};
-        }
-    }
-
-    /**
-     * LEGACY/SLOW: Keeps the original chart logic BUT only runs on initial load
-     * to populate the 1W/1Y/Max columns.
-     */
-    async function fetchHistoricalMetrics(ticker) {
+    // UPDATED FUNCTION: Uses META data for accurate Live & Day Change prices
+    async function getExtendedPerformance(ticker) {
         if (!ticker || ticker === 'Unknown' || ticker === '-') return null;
         const cleanTicker = TICKER_MAP[ticker] || ticker.split(' ')[0]; 
+
+        const proxies = [
+            'https://corsproxy.io/?',
+            'https://api.allorigins.win/get?url=',
+            'https://thingproxy.freeboard.io/fetch/' 
+        ];
+
+        const cacheBuster = `&_=${new Date().getTime()}`;
         
-        // Check cache first
-        if(globalMetricsCache[cleanTicker]) return globalMetricsCache[cleanTicker];
+        // Use range=max to get long history for 1Y/3Y/5Y calculations
+        const targetUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${cleanTicker}?range=max&interval=1d${cacheBuster}`;
 
-        const proxy = 'https://corsproxy.io/?'; 
-        const targetUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${cleanTicker}?range=max&interval=1d`;
-
-        try {
-            const response = await fetch(proxy + encodeURIComponent(targetUrl));
-            const data = await response.json();
-            
-            if (!data.chart || !data.chart.result) return null;
-            
-            const quote = data.chart.result[0];
-            const closes = quote.indicators.quote[0].close;
-            const timestamps = quote.timestamp;
-            const currentPrice = quote.meta.regularMarketPrice;
-
-            // Helper to find price N periods ago
-            const getPriceAgo = (amt, mode) => {
-                const now = new Date(quote.meta.regularMarketTime * 1000);
-                const targetDate = new Date(now);
-                if (mode === 'days') targetDate.setDate(targetDate.getDate() - amt);
-                if (mode === 'months') targetDate.setMonth(targetDate.getMonth() - amt);
-                if (mode === 'years') targetDate.setFullYear(targetDate.getFullYear() - amt);
+        for (const proxy of proxies) {
+            try {
+                let fetchUrl = proxy.includes('allorigins') ? proxy + encodeURIComponent(targetUrl) : proxy + targetUrl;
+                const response = await fetch(fetchUrl);
+                if (!response.ok) throw new Error('Network');
                 
-                // Find closest timestamp
-                for (let i = timestamps.length - 1; i >= 0; i--) {
-                    if (timestamps[i] <= targetDate.getTime() / 1000 && closes[i]) {
-                        return closes[i];
+                let data = proxy.includes('allorigins') ? JSON.parse((await response.json()).contents) : await response.json();
+
+                if (!data.chart || !data.chart.result || data.chart.result.length === 0) continue;
+
+                const quote = data.chart.result[0];
+                const meta = quote.meta;
+                const timestamps = quote.timestamp;
+                const closes = quote.indicators.quote[0].close;
+
+                if (!closes || closes.length === 0) continue;
+
+                // --- KEY FIX FOR LIVE PRICE & DAY CHANGE ---
+                // We prioritize META data which comes from the dashboard header
+                // regularMarketPrice = Current Live Price (or Closing Price if market closed)
+                // chartPreviousClose = Official Close of previous session
+                
+                let currentPrice = meta.regularMarketPrice;
+                let prevClose = meta.previousClose;
+                
+                // --- HISTORY LOGIC ---
+                // We still need the array for finding Last Week, Last Month, etc.
+                let lastIndex = -1;
+                for (let i = closes.length - 1; i >= 0; i--) {
+                    if (closes[i] !== null) { 
+                        if(!currentPrice) currentPrice = closes[i]; // Fallback
+                        lastIndex = i;
+                        break; 
                     }
                 }
-                return closes.find(c => c !== null);
-            };
-
-            const metrics = {
-                p1w: (currentPrice - getPriceAgo(7, 'days')) / getPriceAgo(7, 'days'),
-                p1m: (currentPrice - getPriceAgo(1, 'months')) / getPriceAgo(1, 'months'),
-                p3m: (currentPrice - getPriceAgo(3, 'months')) / getPriceAgo(3, 'months'),
-                p6m: (currentPrice - getPriceAgo(6, 'months')) / getPriceAgo(6, 'months'),
-                p1y: (currentPrice - getPriceAgo(1, 'years')) / getPriceAgo(1, 'years'),
-                p3y: (currentPrice - getPriceAgo(3, 'years')) / getPriceAgo(3, 'years'),
-                p5y: (currentPrice - getPriceAgo(5, 'years')) / getPriceAgo(5, 'years'),
-                pMax: (currentPrice - closes[0]) / closes[0],
-                mtdBaseline: getPriceAgo(0, 'months') // Start of month approx
-            };
-
-            // Calculate MTD specifically from the 1st of the month
-            const startOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
-            let mtdPrice = null;
-            for(let i=timestamps.length-1; i>=0; i--) {
-                if(new Date(timestamps[i]*1000) < startOfMonth) {
-                    mtdPrice = closes[i];
-                    break;
+                const lastTimestamp = timestamps[lastIndex];
+                const lastDate = new Date(lastTimestamp * 1000);
+                
+                // Fallback for prevClose if meta is missing or unreliable
+                if (!prevClose) {
+                     for (let j = lastIndex - 1; j >= 0; j--) {
+                         if (closes[j] !== null) { prevClose = closes[j]; break; }
+                     }
                 }
-            }
-            if(mtdPrice) metrics.mtdRate = (currentPrice - mtdPrice) / mtdPrice;
-            else metrics.mtdRate = 0;
 
-            globalMetricsCache[cleanTicker] = metrics;
-            return metrics;
-        } catch (e) {
-            console.warn(`History fetch failed for ${cleanTicker}`);
-            return null;
+                // Helper to find price N days/months ago
+                const getPriceAgo = (amt, mode) => {
+                    const targetDate = new Date(lastDate);
+                    if (mode === 'days') targetDate.setDate(targetDate.getDate() - amt);
+                    if (mode === 'months') targetDate.setMonth(targetDate.getMonth() - amt);
+                    if (mode === 'years') targetDate.setFullYear(targetDate.getFullYear() - amt);
+                    
+                    for (let i = lastIndex; i >= 0; i--) {
+                        if (timestamps[i] <= targetDate.getTime() / 1000 && closes[i] !== null) {
+                            return closes[i];
+                        }
+                    }
+                    return closes.find(c => c !== null); // fallback to earliest
+                };
+
+                // Calculate Month To Date Baseline (For Account Value)
+                const now = new Date();
+                const startOfCurrentMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+                let mtdBaseline = null;
+                for (let i = timestamps.length - 1; i >= 0; i--) {
+                    if (new Date(timestamps[i] * 1000) < startOfCurrentMonth && closes[i]) {
+                        mtdBaseline = closes[i]; break;
+                    }
+                }
+
+                return { 
+                    price: currentPrice,
+                    ts: lastTimestamp,
+                    mtdRate: (mtdBaseline && currentPrice) ? (currentPrice - mtdBaseline) / mtdBaseline : 0,
+                    
+                    // METRICS
+                    // 1D: Explicitly uses (Live - Official Prev Close) / Official Prev Close
+                    p1d: (prevClose && currentPrice) ? (currentPrice - prevClose) / prevClose : 0,
+                    
+                    p1w: (getPriceAgo(7, 'days') && currentPrice) ? (currentPrice - getPriceAgo(7, 'days')) / getPriceAgo(7, 'days') : 0,
+                    p1m: (getPriceAgo(1, 'months') && currentPrice) ? (currentPrice - getPriceAgo(1, 'months')) / getPriceAgo(1, 'months') : 0,
+                    p3m: (getPriceAgo(3, 'months') && currentPrice) ? (currentPrice - getPriceAgo(3, 'months')) / getPriceAgo(3, 'months') : 0,
+                    p6m: (getPriceAgo(6, 'months') && currentPrice) ? (currentPrice - getPriceAgo(6, 'months')) / getPriceAgo(6, 'months') : 0,
+                    p1y: (getPriceAgo(1, 'years') && currentPrice) ? (currentPrice - getPriceAgo(1, 'years')) / getPriceAgo(1, 'years') : 0,
+                    p3y: (getPriceAgo(3, 'years') && currentPrice) ? (currentPrice - getPriceAgo(3, 'years')) / getPriceAgo(3, 'years') : 0,
+                    p5y: (getPriceAgo(5, 'years') && currentPrice) ? (currentPrice - getPriceAgo(5, 'years')) / getPriceAgo(5, 'years') : 0,
+                    pMax: (closes[0] && currentPrice) ? (currentPrice - closes[0]) / closes[0] : 0
+                };
+
+            } catch (e) {
+                console.warn(`Proxy failed for ${cleanTicker}`);
+            }
         }
+        return null; 
     }
 
-    /**
-     * MASTER UPDATE FUNCTION
-     * mode = 'fast' (Default): Batch fetch only current price (100ms)
-     * mode = 'full': Fetch history + price (Initial load only)
-     */
-    async function updateWithLiveMarketData(accounts, mode = 'fast') {
+    async function updateWithLiveMarketData(accounts, isSilent = false) {
         if (isUpdating) return;
         isUpdating = true;
         
@@ -1278,70 +1265,54 @@
         const headerStatus = document.getElementById('latest-date-display');
         const btn = document.getElementById('manual-refresh-btn');
         
-        if (mode === 'full') {
+        if (!isSilent) {
+            statusDiv.style.opacity = '1';
             statusDiv.style.display = 'flex';
-            statusDiv.innerHTML = "Initializing Dashboard...<br><span style='font-size:0.8em'>Fetching Historical Performance...</span>";
+            statusDiv.innerHTML = "Fetching Real-Time Market Data...<br><span style='font-size:0.8em; font-weight:normal'>Calculating Multi-Year Performance...</span>";
         } else {
             headerStatus.innerHTML = "<span class='live-dot'></span> Updating...";
             headerStatus.style.color = "#e67e22";
             if(btn) btn.innerHTML = "<span>↻</span> ...";
         }
-
-        const now = new Date();
-        const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
         
-        // 1. Gather ALL Tickers
-        const allTickers = new Set([...userWatchlist]);
-        accounts.forEach(acc => {
-            if(acc.data.length > 0) {
-                 const override = accountOverrides[acc.id];
-                 let t = override ? override.ticker : acc.data[acc.data.length-1].invested;
-                 // Map internal names to real tickers
-                 if (acc.id.includes('fidelity') && (!t || t==='-')) t = 'GOOGL';
-                 if (acc.id.includes('boeing') && t.includes('Bonds')) t = 'BND';
-                 if (acc.id.includes('wells') && t.includes('Cash')) t = 'BIL';
-                 if (t && t !== 'Unknown' && t !== '-') allTickers.add(t);
-            }
-        });
-
-        const tickerArray = Array.from(allTickers);
-
-        // 2. Perform Fetches
+        const now = new Date();
+        const currentYear = now.getFullYear();
+        const currentMonthVal = now.getMonth() + 1; 
+        const currentMonthKey = `${currentYear}-${String(currentMonthVal).padStart(2, '0')}`;
+        
+        // WATCHLIST FETCH
+        watchlistDataStore = [];
         try {
-            // A. Batch Fetch Current Prices (Fast)
-            const batchResults = await fetchBatchQuotes(tickerArray);
+             await Promise.all(userWatchlist.map(async (ticker) => {
+                 const data = await getExtendedPerformance(ticker);
+                 if(data) {
+                     watchlistDataStore.push({
+                         ticker: ticker,
+                         price: data.price,
+                         dayChange: data.p1d,
+                         // Additional Metrics
+                         p1w: data.p1w, p1m: data.p1m, p3m: data.p3m, 
+                         p6m: data.p6m, p1y: data.p1y, p3y: data.p3y, 
+                         p5y: data.p5y, pMax: data.pMax
+                     });
+                 } else {
+                      watchlistDataStore.push({ ticker: ticker, price: 0, dayChange: 0, error: true });
+                 }
+             }));
+             renderWatchlistColumns();
+        } catch(e) { console.error("Watchlist Error", e); }
 
-            // B. If Full Mode, fetch history (Slow)
-            if (mode === 'full') {
-                 await Promise.all(tickerArray.map(t => fetchHistoricalMetrics(t)));
-            }
 
-            // 3. Update Watchlist Data Store
-            watchlistDataStore = userWatchlist.map(ticker => {
-                const clean = TICKER_MAP[ticker] || ticker;
-                const quote = batchResults[clean];
-                const hist = globalMetricsCache[clean] || {};
-                
-                if (!quote) return { ticker, price: 0, dayChange: 0, error: true };
-
-                return {
-                    ticker: ticker,
-                    price: quote.price,
-                    dayChange: quote.changePercent, 
-                    // Use cached history or fallback to 0
-                    p1w: hist.p1w, p1m: hist.p1m, p3m: hist.p3m, 
-                    p6m: hist.p6m, p1y: hist.p1y, p3y: hist.p3y, 
-                    p5y: hist.p5y, pMax: hist.pMax
-                };
-            });
-            renderWatchlistColumns();
-
-            // 4. Update Account Balances
-            accounts.forEach(acc => {
+        // ACCOUNT FETCH (Uses simplified MTD logic within extended fetch or re-uses same logic)
+        try {
+            await Promise.all(accounts.map(async (acc) => {
                 if (acc.data.length === 0) return;
+                
+                // CHECK FOR OVERRIDE TICKER
+                const override = accountOverrides[acc.id];
+                let ticker = override ? override.ticker : null;
 
-                // Determine Baseline (Last month's end)
-                const startOfThisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+                const startOfThisMonth = new Date(currentYear, currentMonthVal - 1, 1);
                 let baselineEntry = null;
                 for (let i = acc.data.length - 1; i >= 0; i--) {
                     if (acc.data[i].dateObj < startOfThisMonth) {
@@ -1349,85 +1320,149 @@
                         break;
                     }
                 }
-                if (!baselineEntry) return; // Can't calc growth without baseline
 
-                // Get or Create Live Entry
+                if (!baselineEntry) return;
+
                 let liveEntry = acc.data.find(d => d.key === currentMonthKey);
                 let isNewRow = false;
-                
+
                 if (!liveEntry) {
                     isNewRow = true;
                     liveEntry = {
                         key: currentMonthKey,
                         dateObj: startOfThisMonth,
-                        deposits: 0, income: 0, marketGain: 0, rawWithdrawals: 0,
+                        deposits: 0,
+                        income: 0,
+                        marketGain: 0,
                         cumulative: baselineEntry.cumulative,
                         balance: baselineEntry.balance,
                         invested: baselineEntry.invested,
-                        isLive: true, isError: false, timestamp: 0
+                        rawWithdrawals: 0, 
+                        isLive: true,
+                        isError: false,
+                        timestamp: 0 
                     };
-                }
-
-                // Resolve Ticker
-                const override = accountOverrides[acc.id];
-                let ticker = override ? override.ticker : liveEntry.invested;
-                if (!ticker || ticker === 'Unknown') {
-                    // Fallbacks based on ID if invested is empty
-                    if (acc.id.includes('fidelity')) ticker = 'GOOGL';
-                    else if (acc.id.includes('boeing')) ticker = 'BND';
-                    else if (acc.id.includes('wells')) ticker = 'BIL';
-                }
-
-                // Apply Price Data
-                const cleanTicker = TICKER_MAP[ticker] || ticker;
-                const quote = batchResults[cleanTicker];
-                const hist = globalMetricsCache[cleanTicker];
-
-                if (quote) {
+                } else {
+                    liveEntry.isLive = true;
                     liveEntry.isError = false;
-                    liveEntry.timestamp = quote.ts;
-                    
-                    // Logic A: Override Qty * Price
-                    if (override && override.qty) {
-                        liveEntry.balance = quote.price * override.qty;
-                        liveEntry.marketGain = liveEntry.balance - liveEntry.deposits - liveEntry.income - baselineEntry.balance; 
-                        liveEntry.cumulative = baselineEntry.cumulative + liveEntry.marketGain + liveEntry.income;
-                    } 
-                    // Logic B: Use MTD % from Historical Cache * Baseline Balance
-                    else if (hist && hist.mtdRate !== undefined) {
-                         // We have to rely on the 'full' fetch having happened once to get MTD rate
-                         // OR we can approx MTD if we don't have history by just using Price? 
-                         // No, we need MTD relative to month start. 
-                         // Optimization: If we lack MTD rate (fast mode only run), we can't update Balance perfectly.
-                         // Only if we have history. 
-                         const growth = baselineEntry.balance * hist.mtdRate;
-                         liveEntry.marketGain = growth;
-                         liveEntry.balance = baselineEntry.balance + growth + liveEntry.deposits + liveEntry.income;
-                         liveEntry.cumulative = baselineEntry.cumulative + growth + liveEntry.income;
+                }
+
+                if(!ticker) {
+                    ticker = liveEntry.invested; 
+                    if (acc.id.includes('fidelity')) ticker = 'GOOGL';
+                    if (acc.id.includes('boeing')) ticker = 'Boeing (Bonds)';
+                    if (acc.id.includes('wells')) ticker = 'Wells Fargo (Cash)';
+                }
+
+                const marketData = await getExtendedPerformance(ticker);
+                
+                if (marketData === null) {
+                    liveEntry.isError = true;
+                    if (isNewRow) {
+                        liveEntry.marketGain = 0;
+                        liveEntry.balance = baselineEntry.balance + liveEntry.deposits + liveEntry.income;
                     }
                 } else {
-                    if (isNewRow) liveEntry.isError = true;
+                    const growthAmount = baselineEntry.balance * marketData.mtdRate;
+                    liveEntry.marketGain = growthAmount; 
+                    liveEntry.balance = baselineEntry.balance + growthAmount + liveEntry.deposits + liveEntry.income;
+                    liveEntry.cumulative = baselineEntry.cumulative + growthAmount + liveEntry.income;
+                    liveEntry.timestamp = marketData.ts;
+                    // IF OVERRIDE QTY EXISTS, RECALCULATE BALANCE BASED ON PRICE * QTY
+                    if(override && override.qty) {
+                         liveEntry.balance = marketData.price * override.qty;
+                         liveEntry.marketGain = liveEntry.balance - liveEntry.deposits - liveEntry.income - baselineEntry.balance; 
+                         liveEntry.cumulative = baselineEntry.cumulative + liveEntry.marketGain + liveEntry.income; // Approx
+                    }
                 }
 
-                if (isNewRow) acc.data.push(liveEntry);
-            });
-
+                if (isNewRow) {
+                    acc.data.push(liveEntry);
+                }
+            }));
         } catch (e) {
-            console.error("Update loop failed", e);
+            console.error(e);
         } finally {
             isUpdating = false;
             if(btn) btn.innerHTML = "<span>↻</span> Update";
         }
     }
+    
+    function renderWatchlistColumns() {
+        // Filter into two arrays
+        const gainers = watchlistDataStore.filter(i => i.dayChange >= 0).sort((a,b) => b.dayChange - a.dayChange);
+        const losers = watchlistDataStore.filter(i => i.dayChange < 0).sort((a,b) => a.dayChange - b.dayChange); // Worst first
+        
+        // Identify Vested Tickers
+        const vestedTickers = new Set();
+        globalAccountsData.forEach(acc => {
+            const last = acc.data[acc.data.length - 1];
+            if(last && last.balance > 0) {
+                 const override = accountOverrides[acc.id];
+                 let t = override ? override.ticker : last.invested;
+                 // Clean names
+                 if(t === 'Boeing (Bonds)') t = 'BND';
+                 if(t === 'Wells Fargo (Cash)') t = 'BIL';
+                 if(t.includes('GOOGL')) t = 'GOOGL';
+                 
+                 vestedTickers.add(t);
+            }
+        });
 
+        const fillBody = (items, bodyId) => {
+            const body = document.getElementById(bodyId);
+            body.innerHTML = '';
+            items.forEach(item => {
+                const tr = document.createElement('tr');
+                
+                const formatPct = (val) => {
+                    if(val === undefined || val === null) return '-';
+                    const c = val >= 0 ? 'text-green' : 'text-red';
+                    const s = val >= 0 ? '+' : '';
+                    return `<span class="${c}">${s}${(val * 100).toFixed(2)}%</span>`;
+                };
+                
+                // Check if Vested
+                let tickerHtml = item.ticker;
+                let trClass = "";
+                if (vestedTickers.has(item.ticker) || Object.values(TICKER_MAP).includes(item.ticker)) {
+                    // Double check exact matches or map matches
+                    // Simplification: if item.ticker is in the Set
+                    if(vestedTickers.has(item.ticker)) {
+                        tickerHtml = `<span class="vested-cell">${item.ticker}<span class="vested-badge">HELD</span></span>`;
+                    }
+                }
+
+                tr.innerHTML = `
+                    <td class="sticky-col-1">${tickerHtml}</td>
+                    <td class="sticky-col-2">${fmtMoney(item.price)}</td>
+                    <td>${formatPct(item.dayChange)}</td>
+                    <td>${formatPct(item.p1w)}</td>
+                    <td>${formatPct(item.p1m)}</td>
+                    <td>${formatPct(item.p3m)}</td>
+                    <td>${formatPct(item.p6m)}</td>
+                    <td>${formatPct(item.p1y)}</td>
+                    <td>${formatPct(item.p3y)}</td>
+                    <td>${formatPct(item.p5y)}</td>
+                    <td>${formatPct(item.pMax)}</td>
+                    <td style="text-align:center">
+                        <button onclick="removeTicker('${item.ticker}')" style="background:transparent; border:none; color:var(--text); opacity:0.5; cursor:pointer;" title="Remove">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </td>
+                `;
+                body.appendChild(tr);
+            });
+        };
+
+        fillBody(gainers, 'watchlist-gainers-body');
+        fillBody(losers, 'watchlist-losers-body');
+    }
+    
     async function manualRefresh() {
         if(isUpdating) return;
-        // Manual refresh triggers a 'fast' update to be snappy
-        // Users usually just want to see the latest price, not re-download 5 years of history
-        await updateWithLiveMarketData(globalAccountsData, 'fast');
+        await updateWithLiveMarketData(globalAccountsData, true);
         processAndRender(globalAccountsData, true);
-        
-        // Reset timer
         const isMarket = isMarketOpen();
         refreshTimer = isMarket ? 10 : 60;
     }
@@ -1953,7 +1988,7 @@
             globalAccountsData = accounts;
 
             initPortfolioConfig();
-            await updateWithLiveMarketData(accounts, 'full');
+            await updateWithLiveMarketData(accounts, false);
 
             processAndRender(accounts, false);
             
