@@ -253,7 +253,9 @@
         .btn-small:hover { background: var(--primary); color: var(--bg); }
         .btn-active { background: var(--goal) !important; color: white !important; border-color: var(--goal) !important; }
 
-        .watchlist-split { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        /* FIXED: Use minmax(0,1fr) to force equal split even with overflow content */
+        .watchlist-split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; }
+        
         .watchlist-col h4 { margin: 0 0 10px 0; font-size: 0.9em; text-transform: uppercase; letter-spacing: 1px; border-bottom: 2px solid; padding-bottom: 5px; }
         .watchlist-col.gainers h4 { color: var(--success); border-color: var(--success); }
         .watchlist-col.losers h4 { color: var(--danger); border-color: var(--danger); }
