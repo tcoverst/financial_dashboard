@@ -85,6 +85,24 @@
             filter: drop-shadow(0 0 5px rgba(255,255,255,0.1));
         }
 
+        /* Highlight Vested Stocks */
+        .vested-row td {
+            background: rgba(46, 204, 113, 0.1) !important;
+            border-top: 1px solid var(--success) !important;
+            border-bottom: 1px solid var(--success) !important;
+        }
+        .vested-badge {
+            font-size: 0.6em;
+            background: var(--success);
+            color: black;
+            padding: 1px 4px;
+            border-radius: 3px;
+            margin-left: 5px;
+            text-transform: uppercase;
+            font-weight: bold;
+            vertical-align: middle;
+        }
+
         /* =========================================
            GLOBAL STRUCTURAL STYLES
            ========================================= */
@@ -228,6 +246,7 @@
         .btn-active { background: var(--goal) !important; color: white !important; border-color: var(--goal) !important; }
 
         .watchlist-split { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        .watchlist-col { overflow: hidden; } /* Contain the scrollable table */
         .watchlist-col h4 { margin: 0 0 10px 0; font-size: 0.9em; text-transform: uppercase; letter-spacing: 1px; border-bottom: 2px solid; padding-bottom: 5px; }
         .watchlist-col.gainers h4 { color: var(--success); border-color: var(--success); }
         .watchlist-col.losers h4 { color: var(--danger); border-color: var(--danger); }
@@ -320,7 +339,7 @@
         <button class="refresh-btn" onclick="manualRefresh()" id="manual-refresh-btn" style="margin:0;">
             <span>↻</span> Update
         </button>
-        <div id="refresh-timer" style="font-size: 0.75em; color: #999;">Updates in 60s</div>
+        <div id="refresh-timer" style="font-size: 0.75em; color: #999;">--</div>
     </div>
 </div>
 
@@ -386,7 +405,15 @@
                                 <tr>
                                     <th style="text-align:left">Ticker</th>
                                     <th style="text-align:right">Price</th>
-                                    <th style="text-align:right">% Day</th>
+                                    <th style="text-align:right">% 1D</th>
+                                    <th style="text-align:right">% 1W</th>
+                                    <th style="text-align:right">% 1M</th>
+                                    <th style="text-align:right">% 3M</th>
+                                    <th style="text-align:right">% 6M</th>
+                                    <th style="text-align:right">% 1Y</th>
+                                    <th style="text-align:right">% 3Y</th>
+                                    <th style="text-align:right">% 5Y</th>
+                                    <th style="text-align:right">% Max</th>
                                     <th></th>
                                 </tr>
                             </thead>
@@ -403,7 +430,15 @@
                                 <tr>
                                     <th style="text-align:left">Ticker</th>
                                     <th style="text-align:right">Price</th>
-                                    <th style="text-align:right">% Day</th>
+                                    <th style="text-align:right">% 1D</th>
+                                    <th style="text-align:right">% 1W</th>
+                                    <th style="text-align:right">% 1M</th>
+                                    <th style="text-align:right">% 3M</th>
+                                    <th style="text-align:right">% 6M</th>
+                                    <th style="text-align:right">% 1Y</th>
+                                    <th style="text-align:right">% 3Y</th>
+                                    <th style="text-align:right">% 5Y</th>
+                                    <th style="text-align:right">% Max</th>
                                     <th></th>
                                 </tr>
                             </thead>
@@ -946,8 +981,7 @@
     let charts = {};
     let watchlistDataStore = [];
 
-    let refreshInterval = null;
-    let refreshTimer = 60;
+    let refreshTimer = 0;
     let isUpdating = false;
 
     // ==========================================
@@ -983,6 +1017,26 @@
         let months = targetDate.getMonth() - now.getMonth();
         if (months < 0) { years--; months += 12; }
         return `${years} Years, ${months} Months remaining`;
+    }
+    
+    function getHeldTickers() {
+        const held = new Set();
+        if(globalAccountsData) {
+            globalAccountsData.forEach(acc => {
+                // Check override
+                if(accountOverrides[acc.id] && accountOverrides[acc.id].ticker) {
+                    held.add(accountOverrides[acc.id].ticker);
+                } else if(acc.data && acc.data.length > 0) {
+                     // Get latest invested
+                     const last = acc.data[acc.data.length-1];
+                     if(last && last.invested && last.invested !== 'Unknown') {
+                         const mapped = TICKER_MAP[last.invested] || last.invested.split(' ')[0];
+                         held.add(mapped);
+                     }
+                }
+            });
+        }
+        return held;
     }
 
     // ==========================================
@@ -1098,8 +1152,8 @@
     // LOGIC: REAL-TIME MARKET DATA (UPDATED)
     // ==========================================
 
-    async function getMonthToDatePerformance(ticker) {
-        if (!ticker || ticker === 'Unknown' || ticker === '-') return 0;
+    async function getMarketPerformance(ticker) {
+        if (!ticker || ticker === 'Unknown' || ticker === '-') return null;
         const cleanTicker = TICKER_MAP[ticker] || ticker.split(' ')[0]; 
 
         const proxies = [
@@ -1110,8 +1164,8 @@
 
         const cacheBuster = `&_=${new Date().getTime()}`;
         
-        // Use range=3mo to get Month performance, and verify last two closes for Day Performance
-        const targetUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${cleanTicker}?range=3mo&interval=1d${cacheBuster}`;
+        // FETCH MAX DATA FOR 1D, 1W, 1M, 3M, 6M, 1Y, 3Y, 5Y, MAX
+        const targetUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${cleanTicker}?range=max&interval=1d${cacheBuster}`;
 
         for (const proxy of proxies) {
             try {
@@ -1129,52 +1183,77 @@
 
                 if (!closes || closes.length === 0) continue;
                 
-                // DATA POINT 1: Current Price (Last valid close)
-                let currentPrice = null;
-                let lastIndex = -1;
-                for (let i = closes.length - 1; i >= 0; i--) {
-                    if (closes[i] !== null) { 
-                        currentPrice = closes[i]; 
-                        lastIndex = i;
-                        break; 
-                    }
-                }
-
-                // DATA POINT 2: Month Start Price (for Account MTD)
-                const now = new Date();
-                const startOfCurrentMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-                let baselinePrice = null;
-                for (let i = timestamps.length - 1; i >= 0; i--) {
-                    if (new Date(timestamps[i] * 1000) < startOfCurrentMonth && closes[i]) {
-                        baselinePrice = closes[i]; break;
+                // --- HELPER TO FIND CLOSE PRICE X DAYS AGO ---
+                // We map timestamps to prices
+                const priceMap = [];
+                for(let i=0; i<timestamps.length; i++) {
+                    if(closes[i] !== null) {
+                        priceMap.push({ date: new Date(timestamps[i]*1000), price: closes[i] });
                     }
                 }
                 
-                // DATA POINT 3: STRICT Previous Day Close (For Watchlist Day G/L)
-                // We use the second to last VALID close from the array to ensure we aren't using meta data which might be mismatched
-                let prevClose = null;
-                if (lastIndex > 0) {
-                     // Find the valid close before the current one
-                     for (let j = lastIndex - 1; j >= 0; j--) {
-                         if (closes[j] !== null) {
-                             prevClose = closes[j];
-                             break;
-                         }
-                     }
-                }
-                
-                // Fallback to meta if array scan fails (unlikely)
-                if(!prevClose) prevClose = quote.meta.chartPreviousClose;
-                if(!prevClose) prevClose = baselinePrice; // Final fallback
+                if (priceMap.length === 0) continue;
 
-                const lastTimestamp = timestamps[timestamps.length - 1];
+                const currentPrice = priceMap[priceMap.length - 1].price;
+                const currentTs = priceMap[priceMap.length - 1].date;
+
+                const getPriceAgo = (targetDate) => {
+                    // Find closest date <= targetDate
+                    for (let i = priceMap.length - 1; i >= 0; i--) {
+                        if (priceMap[i].date <= targetDate) {
+                            return priceMap[i].price;
+                        }
+                    }
+                    return priceMap[0].price; // Fallback to earliest
+                };
+
+                const calcChange = (msAgo) => {
+                    if (msAgo === 'MAX') {
+                        const start = priceMap[0].price;
+                        return (currentPrice - start) / start;
+                    }
+                    const target = new Date(currentTs.getTime() - msAgo);
+                    const oldPrice = getPriceAgo(target);
+                    return (currentPrice - oldPrice) / oldPrice;
+                };
+
+                // Time constants in ms
+                const ONE_DAY = 24 * 60 * 60 * 1000;
+                const ONE_WEEK = 7 * ONE_DAY;
+                const ONE_MONTH = 30 * ONE_DAY;
+                const THREE_MONTHS = 90 * ONE_DAY;
+                const SIX_MONTHS = 180 * ONE_DAY;
+                const ONE_YEAR = 365 * ONE_DAY;
+                const THREE_YEARS = 3 * ONE_YEAR;
+                const FIVE_YEARS = 5 * ONE_YEAR;
+
+                // Month-To-Date Calculation (for Account Logic)
+                const startOfCurrentMonth = new Date(currentTs.getFullYear(), currentTs.getMonth(), 1);
+                const mtdBaseline = getPriceAgo(startOfCurrentMonth);
+                const mtdRate = (currentPrice - mtdBaseline) / mtdBaseline;
+                
+                // Previous Day Close (Strictly the close before current)
+                let prevClose = quote.meta.chartPreviousClose; 
+                if(!prevClose && priceMap.length > 1) prevClose = priceMap[priceMap.length-2].price;
+
+                const dayRate = prevClose ? (currentPrice - prevClose) / prevClose : 0;
 
                 return { 
                     price: currentPrice,
                     prevClose: prevClose,
-                    mtdRate: (baselinePrice && currentPrice) ? (currentPrice - baselinePrice) / baselinePrice : 0,
-                    dayRate: (prevClose && currentPrice) ? (currentPrice - prevClose) / prevClose : 0,
-                    ts: lastTimestamp 
+                    mtdRate: mtdRate,
+                    dayRate: dayRate,
+                    ts: timestamps[timestamps.length-1],
+                    changes: {
+                        '1W': calcChange(ONE_WEEK),
+                        '1M': calcChange(ONE_MONTH),
+                        '3M': calcChange(THREE_MONTHS),
+                        '6M': calcChange(SIX_MONTHS),
+                        '1Y': calcChange(ONE_YEAR),
+                        '3Y': calcChange(THREE_YEARS),
+                        '5Y': calcChange(FIVE_YEARS),
+                        'Max': calcChange('MAX')
+                    }
                 };
 
             } catch (e) {
@@ -1211,15 +1290,16 @@
         watchlistDataStore = [];
         try {
              await Promise.all(userWatchlist.map(async (ticker) => {
-                 const data = await getMonthToDatePerformance(ticker);
+                 const data = await getMarketPerformance(ticker);
                  if(data) {
                      watchlistDataStore.push({
                          ticker: ticker,
                          price: data.price,
-                         dayChange: data.dayRate
+                         dayChange: data.dayRate,
+                         changes: data.changes
                      });
                  } else {
-                      watchlistDataStore.push({ ticker: ticker, price: 0, dayChange: 0, error: true });
+                      watchlistDataStore.push({ ticker: ticker, price: 0, dayChange: 0, changes:{}, error: true });
                  }
              }));
              renderWatchlistColumns();
@@ -1277,7 +1357,7 @@
                     if (acc.id.includes('wells')) ticker = 'Wells Fargo (Cash)';
                 }
 
-                const marketData = await getMonthToDatePerformance(ticker);
+                const marketData = await getMarketPerformance(ticker);
                 
                 if (marketData === null) {
                     liveEntry.isError = true;
@@ -1308,10 +1388,15 @@
         } finally {
             isUpdating = false;
             if(btn) btn.innerHTML = "<span>↻</span> Update";
+            
+            // CHAIN NEXT UPDATE - AS SOON AS READY
+            scheduleNextUpdate();
         }
     }
     
     function renderWatchlistColumns() {
+        const heldTickers = getHeldTickers();
+
         // Filter into two arrays
         const gainers = watchlistDataStore.filter(i => i.dayChange >= 0).sort((a,b) => b.dayChange - a.dayChange);
         const losers = watchlistDataStore.filter(i => i.dayChange < 0).sort((a,b) => a.dayChange - b.dayChange); // Worst first
@@ -1321,14 +1406,35 @@
             body.innerHTML = '';
             items.forEach(item => {
                 const tr = document.createElement('tr');
-                const colorClass = item.dayChange >= 0 ? 'text-green' : 'text-red';
-                const sign = item.dayChange >= 0 ? '+' : '';
-                const pct = (item.dayChange * 100).toFixed(2) + '%';
+                const isHeld = heldTickers.has(item.ticker);
                 
+                if(isHeld) tr.classList.add('vested-row');
+                
+                const dayColor = item.dayChange >= 0 ? 'text-green' : 'text-red';
+                const daySign = item.dayChange >= 0 ? '+' : '';
+                const dayPct = (item.dayChange * 100).toFixed(2) + '%';
+                
+                const fmtCell = (val) => {
+                    if(val === undefined || isNaN(val)) return '-';
+                    const c = val >= 0 ? 'text-green' : 'text-red';
+                    const s = val >= 0 ? '+' : '';
+                    return `<span class="${c}">${s}${(val*100).toFixed(1)}%</span>`;
+                };
+                
+                let badge = isHeld ? `<span class="vested-badge">HELD</span>` : '';
+
                 tr.innerHTML = `
-                    <td style="font-weight:bold">${item.ticker}</td>
+                    <td style="font-weight:bold; white-space:nowrap;">${item.ticker}${badge}</td>
                     <td>${fmtMoney(item.price)}</td>
-                    <td class="${colorClass}">${sign}${pct}</td>
+                    <td class="${dayColor}">${daySign}${dayPct}</td>
+                    <td>${fmtCell(item.changes?.['1W'])}</td>
+                    <td>${fmtCell(item.changes?.['1M'])}</td>
+                    <td>${fmtCell(item.changes?.['3M'])}</td>
+                    <td>${fmtCell(item.changes?.['6M'])}</td>
+                    <td>${fmtCell(item.changes?.['1Y'])}</td>
+                    <td>${fmtCell(item.changes?.['3Y'])}</td>
+                    <td>${fmtCell(item.changes?.['5Y'])}</td>
+                    <td>${fmtCell(item.changes?.['Max'])}</td>
                     <td style="text-align:center">
                         <button onclick="removeTicker('${item.ticker}')" style="background:transparent; border:none; color:var(--text); opacity:0.5; cursor:pointer;" title="Remove">
                             <i class="fas fa-times"></i>
@@ -1347,8 +1453,6 @@
         if(isUpdating) return;
         await updateWithLiveMarketData(globalAccountsData, true);
         processAndRender(globalAccountsData, true);
-        const isMarket = isMarketOpen();
-        refreshTimer = isMarket ? 10 : 60;
     }
 
     // ==========================================
@@ -1879,7 +1983,7 @@
             document.getElementById('loading').style.opacity = '0';
             setTimeout(() => { document.getElementById('loading').style.display = 'none'; }, 300);
 
-            startAutoRefresh();
+            scheduleNextUpdate();
 
         } catch (error) {
             console.error(error);
@@ -1905,28 +2009,17 @@
         return minutesOfDay >= start && minutesOfDay < end;
     }
 
-    function startAutoRefresh() {
+    // CHANGED: No longer setInterval, but recursive setTimeout chain
+    function scheduleNextUpdate() {
         let isMarket = isMarketOpen();
-        refreshTimer = isMarket ? 10 : 60;
-
-        setInterval(() => {
-            refreshTimer--;
-            
-            const currentMarketStatus = isMarketOpen();
-            if (currentMarketStatus !== isMarket) {
-                isMarket = currentMarketStatus;
-            }
-            
-            if (refreshTimer <= 0) {
-                console.log("Auto-Refreshing Market Data...");
-                updateWithLiveMarketData(globalAccountsData, true); 
-                processAndRender(globalAccountsData, true); 
-                
-                refreshTimer = isMarket ? 10 : 60;
-            }
-            
-            document.getElementById('refresh-timer').innerText = `Updates in ${refreshTimer}s`;
-        }, 1000);
+        let delay = isMarket ? 1000 : 5000; // 1s if market open, 5s if closed (just in case)
+        
+        setTimeout(() => {
+             console.log("Triggering continuous market update...");
+             updateWithLiveMarketData(globalAccountsData, true).then(() => {
+                 processAndRender(globalAccountsData, true);
+             });
+        }, delay);
     }
 
     function createSnapshotTable(accounts, alignedData, index, tableId, headerId, monthKey) {
