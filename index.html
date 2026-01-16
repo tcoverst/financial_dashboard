@@ -1145,7 +1145,7 @@
     // LOGIC: REAL-TIME MARKET DATA (UPDATED)
     // ==========================================
 
-    // UPDATED FUNCTION: Fetches Extended History (Max) for multi-timeframe Analysis
+    // UPDATED FUNCTION: Uses META data for accurate Live & Day Change prices
     async function getExtendedPerformance(ticker) {
         if (!ticker || ticker === 'Unknown' || ticker === '-') return null;
         const cleanTicker = TICKER_MAP[ticker] || ticker.split(' ')[0]; 
@@ -1159,7 +1159,6 @@
         const cacheBuster = `&_=${new Date().getTime()}`;
         
         // Use range=max to get long history for 1Y/3Y/5Y calculations
-        // Using interval=1d
         const targetUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${cleanTicker}?range=max&interval=1d${cacheBuster}`;
 
         for (const proxy of proxies) {
@@ -1173,17 +1172,26 @@
                 if (!data.chart || !data.chart.result || data.chart.result.length === 0) continue;
 
                 const quote = data.chart.result[0];
+                const meta = quote.meta;
                 const timestamps = quote.timestamp;
                 const closes = quote.indicators.quote[0].close;
 
                 if (!closes || closes.length === 0) continue;
+
+                // --- KEY FIX FOR LIVE PRICE & DAY CHANGE ---
+                // We prioritize META data which comes from the dashboard header
+                // regularMarketPrice = Current Live Price (or Closing Price if market closed)
+                // chartPreviousClose = Official Close of previous session
                 
-                // Find Last Valid Price (Current)
-                let currentPrice = null;
+                let currentPrice = meta.regularMarketPrice;
+                let prevClose = meta.chartPreviousClose || meta.previousClose;
+                
+                // --- HISTORY LOGIC ---
+                // We still need the array for finding Last Week, Last Month, etc.
                 let lastIndex = -1;
                 for (let i = closes.length - 1; i >= 0; i--) {
                     if (closes[i] !== null) { 
-                        currentPrice = closes[i]; 
+                        if(!currentPrice) currentPrice = closes[i]; // Fallback
                         lastIndex = i;
                         break; 
                     }
@@ -1192,15 +1200,12 @@
                 const lastDate = new Date(lastTimestamp * 1000);
 
                 // Helper to find price N days/months ago
-                // Mode: 'days', 'months', 'years'
                 const getPriceAgo = (amt, mode) => {
                     const targetDate = new Date(lastDate);
                     if (mode === 'days') targetDate.setDate(targetDate.getDate() - amt);
                     if (mode === 'months') targetDate.setMonth(targetDate.getMonth() - amt);
                     if (mode === 'years') targetDate.setFullYear(targetDate.getFullYear() - amt);
                     
-                    // Find closest timestamp >= targetDate (or <=, but standard is finding the close near that date)
-                    // We iterate backwards. If we hit a date <= target, that's our match.
                     for (let i = lastIndex; i >= 0; i--) {
                         if (timestamps[i] <= targetDate.getTime() / 1000 && closes[i] !== null) {
                             return closes[i];
@@ -1208,17 +1213,6 @@
                     }
                     return closes.find(c => c !== null); // fallback to earliest
                 };
-
-                const p1d = getPriceAgo(1, 'days'); // This might just be previous close, logic below is safer for 1D
-                
-                // For 1D specifically, use prevClose from meta or 2nd last item
-                let prevClose = null;
-                if (lastIndex > 0) {
-                     for (let j = lastIndex - 1; j >= 0; j--) {
-                         if (closes[j] !== null) { prevClose = closes[j]; break; }
-                     }
-                }
-                if(!prevClose) prevClose = quote.meta.chartPreviousClose;
 
                 // Calculate Month To Date Baseline (For Account Value)
                 const now = new Date();
@@ -1234,8 +1228,11 @@
                     price: currentPrice,
                     ts: lastTimestamp,
                     mtdRate: (mtdBaseline && currentPrice) ? (currentPrice - mtdBaseline) / mtdBaseline : 0,
-                    // Metrics
+                    
+                    // METRICS
+                    // 1D: Explicitly uses (Live - Official Prev Close) / Official Prev Close
                     p1d: (prevClose && currentPrice) ? (currentPrice - prevClose) / prevClose : 0,
+                    
                     p1w: (getPriceAgo(7, 'days') && currentPrice) ? (currentPrice - getPriceAgo(7, 'days')) / getPriceAgo(7, 'days') : 0,
                     p1m: (getPriceAgo(1, 'months') && currentPrice) ? (currentPrice - getPriceAgo(1, 'months')) / getPriceAgo(1, 'months') : 0,
                     p3m: (getPriceAgo(3, 'months') && currentPrice) ? (currentPrice - getPriceAgo(3, 'months')) / getPriceAgo(3, 'months') : 0,
