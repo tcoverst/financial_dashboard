@@ -1146,30 +1146,25 @@
     // ==========================================
 
 // ==========================================
-    // CHUNKED BATCH FETCHING (Fixes Timeouts & Invalid Tickers)
+    // BATCH DATA FETCHING (Chunked & filtered)
     // ==========================================
     
     // Helper: Split array into smaller chunks
     function chunkArray(myArray, chunk_size){
         var results = [];
-        while (myArray.length) {
-            results.push(myArray.splice(0, chunk_size));
+        var copy = [...myArray]; // Create copy to avoid modifying original
+        while (copy.length) {
+            results.push(copy.splice(0, chunk_size));
         }
         return results;
     }
 
-    // 1. Fetch Current Prices (Chunked)
+    // 1. Fetch Current Prices (Batch)
     async function fetchBatchQuotes(tickers) {
         if (!tickers || tickers.length === 0) return {};
         
-        // FILTER: Remove invalid tickers like 'Cash' which break the API
-        const validTickers = [...new Set(tickers)].filter(t => 
-            t && t !== 'Unknown' && t !== '-' && t !== 'Cash' && t !== 'BOND'
-        );
-        
-        // CHUNK: Split into groups of 5 to prevent Proxy Timeouts
-        // Copy array before chunking to avoid destroying original
-        const chunks = chunkArray([...validTickers], 5);
+        // CHUNK: Small size (4) to prevent Timeouts/Blocking
+        const chunks = chunkArray(tickers, 4);
         let combinedResults = {};
 
         const proxies = [
@@ -1177,22 +1172,25 @@
             'https://api.allorigins.win/raw?url='
         ];
 
-        // Process each chunk
         for (const chunk of chunks) {
-            const symbolStr = chunk.join(',');
-            const cacheBuster = Math.floor(Date.now() / 60000);
+            // Remove any lingering invalid symbols just in case
+            const validSymbols = chunk.filter(t => t && t !== 'Cash'); 
+            if(validSymbols.length === 0) continue;
+
+            const symbolStr = validSymbols.join(',');
+            const cacheBuster = Math.floor(Date.now() / 60000); // 1-min cache
             const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${symbolStr}&_cb=${cacheBuster}`;
             
             let chunkSuccess = false;
 
             for (const proxy of proxies) {
-                if (chunkSuccess) break;
+                if (chunkSuccess) break; // Skip other proxies if we got data
                 try {
                     const res = await fetch(proxy + encodeURIComponent(url));
                     if (!res.ok) continue;
                     
                     const json = await res.json();
-                    const data = json.contents ? JSON.parse(json.contents) : json;
+                    const data = json.contents ? JSON.parse(json.contents) : json; // Handle AllOrigins wrapper
                     
                     if (data.quoteResponse && data.quoteResponse.result) {
                         data.quoteResponse.result.forEach(q => {
@@ -1205,23 +1203,21 @@
                         });
                         chunkSuccess = true;
                     }
-                } catch (e) { console.warn(`Chunk Quote Failed on ${proxy}`); }
+                } catch (e) { 
+                    // Silent fail for this proxy, try next
+                }
             }
+            // Small delay between chunks to be polite
+            await new Promise(r => setTimeout(r, 200)); 
         }
         return combinedResults;
     }
 
-    // 2. Fetch History (Chunked)
+    // 2. Fetch History (Batch) - Used for Sparklines/Trends
     async function fetchBatchHistory(tickers) {
         if (!tickers || tickers.length === 0) return {};
-
-        // FILTER
-        const validTickers = [...new Set(tickers)].filter(t => 
-            t && t !== 'Unknown' && t !== '-' && t !== 'Cash' && t !== 'BOND'
-        );
         
-        // CHUNK
-        const chunks = chunkArray([...validTickers], 5);
+        const chunks = chunkArray(tickers, 4);
         let combinedResults = {};
         
         const proxies = [
@@ -1230,8 +1226,10 @@
         ];
 
         for (const chunk of chunks) {
-            const symbolStr = chunk.join(',');
-            // 'spark' endpoint is lighter than 'chart'
+            const validSymbols = chunk.filter(t => t && t !== 'Cash');
+            if(validSymbols.length === 0) continue;
+
+            const symbolStr = validSymbols.join(',');
             const url = `https://query1.finance.yahoo.com/v7/finance/spark?symbols=${symbolStr}&range=5y&interval=1d`;
             
             let chunkSuccess = false;
@@ -1286,13 +1284,14 @@
                         });
                         chunkSuccess = true;
                     }
-                } catch (e) { console.warn(`Chunk History Failed on ${proxy}`); }
+                } catch (e) { }
             }
+            await new Promise(r => setTimeout(r, 200));
         }
         return combinedResults;
     }
     // ==========================================
-    // MAIN UPDATE FUNCTION (Correctly handles Cash & Errors)
+    // MAIN UPDATE FUNCTION (Correct Mapping & Batching)
     // ==========================================
     async function updateWithLiveMarketData(accounts, isSilent = false) {
         if (isUpdating) return;
@@ -1300,11 +1299,13 @@
         
         const headerStatus = document.getElementById('latest-date-display');
         const btn = document.getElementById('manual-refresh-btn');
+        
+        // Seamless loading state
         if(headerStatus) headerStatus.innerHTML = "<span class='live-dot' style='background:orange'></span> Updating...";
         if(btn) btn.innerHTML = "<i class='fas fa-sync fa-spin'></i>";
 
         try {
-            // 1. PREPARE TICKERS
+            // 1. PREPARE TICKERS (Set ensures uniqueness)
             const allTickers = new Set();
             
             // From Watchlist
@@ -1312,40 +1313,45 @@
                 userWatchlist.forEach(t => allTickers.add(t));
             }
             
-            // From Accounts (With Mapping)
+            // From Accounts (Apply Overrides & Mappings)
             accounts.forEach(acc => {
                 const override = accountOverrides[acc.id];
                 let ticker = override ? override.ticker : (acc.data[acc.data.length-1]?.invested);
                 
-                // --- CRITICAL MAPS ---
+                // --- CRITICAL MAPPING FIX ---
+                // Map invalid/custom names to real tickers BEFORE adding to list
                 if (acc.id.toLowerCase().includes('fidelity')) ticker = 'GOOGL';
-                if (acc.id.toLowerCase().includes('cash')) ticker = 'BIL'; // Map Cash to BIL
+                if (acc.id.toLowerCase().includes('cash')) ticker = 'BIL'; 
                 if (ticker === 'Cash') ticker = 'BIL'; 
                 if (ticker === 'BOND') ticker = 'BND';
 
                 if (ticker && ticker !== 'Unknown' && ticker !== '-') {
                     const realTicker = TICKER_MAP[ticker] || ticker.split(' ')[0];
-                    acc._tempTicker = realTicker; 
+                    acc._tempTicker = realTicker; // Store mapped ticker on account object for later
                     allTickers.add(realTicker);
                 }
             });
 
-            const tickerArray = Array.from(allTickers);
-            console.log("Fetching Chunks:", tickerArray);
+            // Convert to array and filter out any remaining bad data
+            const tickerArray = Array.from(allTickers).filter(t => t && t !== 'Cash');
+            console.log("Fetching Batches:", tickerArray);
 
-            // 2. FETCH DATA (Chunked)
+            // 2. FETCH DATA (Parallel Batch Requests)
             const [quotes, history] = await Promise.all([
                 fetchBatchQuotes(tickerArray),
                 fetchBatchHistory(tickerArray)
             ]);
 
-            // 3. UPDATE WATCHLIST
+            // 3. UPDATE WATCHLIST UI
             if (typeof userWatchlist !== 'undefined') {
                 watchlistDataStore = [];
                 userWatchlist.forEach(ticker => {
                     const clean = TICKER_MAP[ticker] || ticker;
-                    const q = quotes[clean] || {};
-                    const h = history[clean] || {};
+                    // Handle case where ticker was mapped (e.g. Cash -> BIL)
+                    const lookup = (clean === 'Cash') ? 'BIL' : clean;
+                    
+                    const q = quotes[lookup] || {};
+                    const h = history[lookup] || {};
                     
                     if (q.price) {
                         watchlistDataStore.push({
@@ -1366,9 +1372,9 @@
             let runningTotal = 0;
 
             accounts.forEach(acc => {
-                const ticker = acc._tempTicker;
+                const ticker = acc._tempTicker; // Use the mapped ticker we stored earlier
                 
-                // If no ticker (e.g. manual real estate), just add value
+                // If no ticker (e.g. manual real estate), just add existing value
                 if (!ticker) {
                     if (acc.value) runningTotal += acc.value;
                     return;
@@ -1390,13 +1396,14 @@
                     acc.p1d = q.p1d;
                     acc.dayChange = q.p1d;
 
-                    // Calc Value
+                    // Calculate Value
                     const override = accountOverrides[acc.id];
                     const lastMonth = acc.data[acc.data.length-1];
                     
                     if (override && override.qty) {
                         acc.value = q.price * override.qty;
                     } else if (lastMonth) {
+                        // Estimate based on monthly growth if no share count
                         const growth = h.p1m || 0;
                         acc.value = lastMonth.balance * (1 + growth);
                     }
@@ -1407,12 +1414,12 @@
                          runningTotal += acc.value;
                     }
                 } else {
-                    // Failover
+                    // Failover: Keep old value if fetch failed
                     if(acc.value) runningTotal += acc.value;
                 }
             });
 
-            // 5. HEADERS
+            // 5. UPDATE HEADERS
             const nw = document.getElementById('stat-networth');
             const dc = document.getElementById('stat-day-change');
             
@@ -1436,6 +1443,11 @@
             if (typeof processAndRender === 'function') processAndRender(accounts, true);
         }
     }
+    // ==========================================
+    // ==========================================
+    // ==========================================
+
+    
     function renderWatchlistColumns() {
         // Filter into two arrays
         const gainers = watchlistDataStore.filter(i => i.dayChange >= 0).sort((a,b) => b.dayChange - a.dayChange);
@@ -2758,6 +2770,7 @@
 </script>
 </body>
 </html>
+
 
 
 
