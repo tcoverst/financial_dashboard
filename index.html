@@ -1145,123 +1145,132 @@
     // LOGIC: REAL-TIME MARKET DATA (UPDATED)
     // ==========================================
 
-    // UPDATED FUNCTION: More robust proxy handling and validation
+    // UPDATED FUNCTION: robust timeouts, fallback data, and lighter requests
     async function getExtendedPerformance(ticker) {
         if (!ticker || ticker === 'Unknown' || ticker === '-') return null;
         const cleanTicker = TICKER_MAP[ticker] || ticker.split(' ')[0]; 
 
-        // UPDATED PROXY LIST: Prioritizing 'raw' output for better stability
+        // HELPER: Fetch with 4-second timeout to prevent "hanging"
+        const fetchWithTimeout = async (url, timeout = 4000) => {
+            const controller = new AbortController();
+            const id = setTimeout(() => controller.abort(), timeout);
+            try {
+                const response = await fetch(url, { signal: controller.signal });
+                clearTimeout(id);
+                return response;
+            } catch (err) {
+                clearTimeout(id);
+                throw err;
+            }
+        };
+
         const proxies = [
-            'https://api.allorigins.win/raw?url=', // Generally most reliable
-            'https://corsproxy.io/?',              // Backup
-            'https://thingproxy.freeboard.io/fetch/' // Last resort
+            'https://api.allorigins.win/raw?url=', 
+            'https://corsproxy.io/?',
+            'https://thingproxy.freeboard.io/fetch/' 
         ];
 
-        const cacheBuster = `&_=${new Date().getTime()}`;
-        const targetUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${cleanTicker}?range=max&interval=1d${cacheBuster}`;
+        // URL 1: Chart Data (Rich history for 1Y/5Y stats) - Limited to 5y to reduce size
+        const chartUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${cleanTicker}?range=5y&interval=1d`;
+        
+        // URL 2: Quote Data (Fallback - Just price, no history)
+        const quoteUrl = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${cleanTicker}`;
 
+        // --- ATTEMPT 1: FULL CHART DATA ---
         for (const proxy of proxies) {
             try {
-                // Construct the correct URL based on the proxy type
-                const fetchUrl = proxy + encodeURIComponent(targetUrl);
-                
-                const response = await fetch(fetchUrl);
-                if (!response.ok) throw new Error('Network response was not ok');
-                
-                // DATA PARSING: Handle different proxy return types
-                let data;
+                const target = proxy + encodeURIComponent(chartUrl);
+                const response = await fetchWithTimeout(target);
+                if (!response.ok) continue;
+
                 const text = await response.text();
-                
-                try {
-                    data = JSON.parse(text);
-                } catch (e) {
-                    // If JSON parse fails, the proxy returned an HTML error page (common with 429s)
-                    continue; // Try next proxy
-                }
+                let data;
+                try { data = JSON.parse(text); } catch(e) { continue; }
+                if (data.contents) { try { data = JSON.parse(data.contents); } catch(e) { continue; } }
 
-                // Handle 'allorigins' non-raw wrapper if it fell back to that
-                if (data.contents) {
-                    try { data = JSON.parse(data.contents); } catch(e) { continue; }
-                }
-
-                // VALIDATION: Ensure we actually have Yahoo chart data
                 if (!data.chart || !data.chart.result || data.chart.result.length === 0) continue;
 
-                const quote = data.chart.result[0];
-                const meta = quote.meta;
-                const timestamps = quote.timestamp;
-                const closes = quote.indicators.quote[0].close;
+                const result = data.chart.result[0];
+                const meta = result.meta;
+                const timestamps = result.timestamp || [];
+                const closes = result.indicators.quote[0].close || [];
 
-                if (!closes || closes.length === 0) continue;
-
-                // --- DATA EXTRACTION (Logic unchanged) ---
-                let currentPrice = meta.regularMarketPrice;
-                let prevClose = meta.previousClose;
+                // Validations
+                if (closes.length === 0) continue;
                 
-                let lastIndex = -1;
-                for (let i = closes.length - 1; i >= 0; i--) {
-                    if (closes[i] !== null) { 
-                        if(!currentPrice) currentPrice = closes[i]; 
-                        lastIndex = i;
-                        break; 
+                let currentPrice = meta.regularMarketPrice || closes[closes.length - 1];
+                let prevClose = meta.previousClose || meta.chartPreviousClose;
+                
+                // Find Month-To-Date Baseline
+                const now = new Date();
+                const startMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+                let mtdBaseline = null;
+                
+                // Helper to find historical price
+                const getPrice = (ago, mode) => {
+                    const d = new Date(result.timestamp[result.timestamp.length-1] * 1000);
+                    if(mode === 'd') d.setDate(d.getDate() - ago);
+                    if(mode === 'm') d.setMonth(d.getMonth() - ago);
+                    if(mode === 'y') d.setFullYear(d.getFullYear() - ago);
+                    const t = d.getTime() / 1000;
+                    for(let i=timestamps.length-1; i>=0; i--) {
+                        if(timestamps[i] <= t && closes[i]) return closes[i];
                     }
-                }
-                
-                if (lastIndex === -1) continue; // No valid closes found
-
-                const lastTimestamp = timestamps[lastIndex];
-                const lastDate = new Date(lastTimestamp * 1000);
-                
-                if (!prevClose) {
-                     for (let j = lastIndex - 1; j >= 0; j--) {
-                         if (closes[j] !== null) { prevClose = closes[j]; break; }
-                     }
-                }
-
-                const getPriceAgo = (amt, mode) => {
-                    const targetDate = new Date(lastDate);
-                    if (mode === 'days') targetDate.setDate(targetDate.getDate() - amt);
-                    if (mode === 'months') targetDate.setMonth(targetDate.getMonth() - amt);
-                    if (mode === 'years') targetDate.setFullYear(targetDate.getFullYear() - amt);
-                    
-                    for (let i = lastIndex; i >= 0; i--) {
-                        if (timestamps[i] <= targetDate.getTime() / 1000 && closes[i] !== null) {
-                            return closes[i];
-                        }
-                    }
-                    return closes.find(c => c !== null); 
+                    return closes[0];
                 };
 
-                const now = new Date();
-                const startOfCurrentMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-                let mtdBaseline = null;
-                for (let i = timestamps.length - 1; i >= 0; i--) {
-                    if (new Date(timestamps[i] * 1000) < startOfCurrentMonth && closes[i]) {
+                for(let i=timestamps.length-1; i>=0; i--) {
+                    if(new Date(timestamps[i]*1000) < startMonth && closes[i]) {
                         mtdBaseline = closes[i]; break;
                     }
                 }
 
-                return { 
+                return {
                     price: currentPrice,
-                    ts: lastTimestamp,
-                    mtdRate: (mtdBaseline && currentPrice) ? (currentPrice - mtdBaseline) / mtdBaseline : 0,
-                    p1d: (prevClose && currentPrice) ? (currentPrice - prevClose) / prevClose : 0,
-                    p1w: (getPriceAgo(7, 'days') && currentPrice) ? (currentPrice - getPriceAgo(7, 'days')) / getPriceAgo(7, 'days') : 0,
-                    p1m: (getPriceAgo(1, 'months') && currentPrice) ? (currentPrice - getPriceAgo(1, 'months')) / getPriceAgo(1, 'months') : 0,
-                    p3m: (getPriceAgo(3, 'months') && currentPrice) ? (currentPrice - getPriceAgo(3, 'months')) / getPriceAgo(3, 'months') : 0,
-                    p6m: (getPriceAgo(6, 'months') && currentPrice) ? (currentPrice - getPriceAgo(6, 'months')) / getPriceAgo(6, 'months') : 0,
-                    p1y: (getPriceAgo(1, 'years') && currentPrice) ? (currentPrice - getPriceAgo(1, 'years')) / getPriceAgo(1, 'years') : 0,
-                    p3y: (getPriceAgo(3, 'years') && currentPrice) ? (currentPrice - getPriceAgo(3, 'years')) / getPriceAgo(3, 'years') : 0,
-                    p5y: (getPriceAgo(5, 'years') && currentPrice) ? (currentPrice - getPriceAgo(5, 'years')) / getPriceAgo(5, 'years') : 0,
-                    pMax: (closes[0] && currentPrice) ? (currentPrice - closes[0]) / closes[0] : 0
+                    ts: result.timestamp[result.timestamp.length - 1],
+                    mtdRate: (mtdBaseline) ? (currentPrice - mtdBaseline)/mtdBaseline : 0,
+                    p1d: (prevClose) ? (currentPrice - prevClose)/prevClose : 0,
+                    p1w: (getPrice(7,'d')) ? (currentPrice - getPrice(7,'d'))/getPrice(7,'d') : 0,
+                    p1m: (getPrice(1,'m')) ? (currentPrice - getPrice(1,'m'))/getPrice(1,'m') : 0,
+                    p3m: (getPrice(3,'m')) ? (currentPrice - getPrice(3,'m'))/getPrice(3,'m') : 0,
+                    p6m: (getPrice(6,'m')) ? (currentPrice - getPrice(6,'m'))/getPrice(6,'m') : 0,
+                    p1y: (getPrice(1,'y')) ? (currentPrice - getPrice(1,'y'))/getPrice(1,'y') : 0,
+                    p3y: (getPrice(3,'y')) ? (currentPrice - getPrice(3,'y'))/getPrice(3,'y') : 0,
+                    p5y: (getPrice(5,'y')) ? (currentPrice - getPrice(5,'y'))/getPrice(5,'y') : 0,
+                    pMax: (closes[0]) ? (currentPrice - closes[0])/closes[0] : 0
                 };
 
-            } catch (e) {
-                console.warn(`Proxy ${proxy} failed for ${cleanTicker}:`, e);
-                // Loop continues to next proxy
-            }
+            } catch (e) { console.log("Chart fetch failed", e); }
         }
-        return null; // All proxies failed
+
+        // --- ATTEMPT 2: SIMPLE QUOTE FALLBACK (If Chart Fails) ---
+        // This ensures the dashboard loads even if history is blocked
+        for (const proxy of proxies) {
+            try {
+                const target = proxy + encodeURIComponent(quoteUrl);
+                const response = await fetchWithTimeout(target);
+                if (!response.ok) continue;
+
+                const text = await response.text();
+                let data;
+                try { data = JSON.parse(text); } catch(e) { continue; }
+                if (data.contents) { try { data = JSON.parse(data.contents); } catch(e) { continue; } }
+
+                if (!data.quoteResponse || !data.quoteResponse.result || data.quoteResponse.result.length === 0) continue;
+                
+                const q = data.quoteResponse.result[0];
+                // Return simplified object with just current price stats
+                return {
+                    price: q.regularMarketPrice,
+                    ts: Date.now() / 1000,
+                    mtdRate: 0, // Cannot calc without history
+                    p1d: q.regularMarketChangePercent / 100,
+                    p1w: 0, p1m: 0, p3m: 0, p6m: 0, p1y: 0, p3y: 0, p5y: 0, pMax: 0
+                };
+            } catch (e) { console.log("Quote fetch failed", e); }
+        }
+
+        return null; // Both failed
     }
 
     async function updateWithLiveMarketData(accounts, isSilent = false) {
@@ -2704,4 +2713,5 @@
 </script>
 </body>
 </html>
+
 
