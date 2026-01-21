@@ -1155,16 +1155,16 @@
     // GLOBAL: Tracks proxies that are blocked or down so we don't retry them
     const deadProxies = new Set();
 
-    // UPDATED: Prioritizes CodeTabs and rotates Yahoo Endpoints
+    // UPDATED: Removes dead proxies. Prioritizes CodeTabs and AllOrigins.
     async function getExtendedPerformance(ticker) {
         if (!ticker || ticker === 'Unknown' || ticker === '-') return null;
         const cleanTicker = TICKER_MAP[ticker] || ticker.split(' ')[0]; 
         
-        // Cache Buster: Updates every 60s
+        // Cache Buster: Change every 60s
         const cacheBuster = Math.floor(Date.now() / 60000); 
 
         // TIMEOUT HELPER
-        const fetchWithTimeout = async (url, timeout = 6000) => {
+        const fetchWithTimeout = async (url, timeout = 5000) => {
             const controller = new AbortController();
             const id = setTimeout(() => controller.abort(), timeout);
             try {
@@ -1174,21 +1174,21 @@
             } catch (err) { clearTimeout(id); throw err; }
         };
 
-        // DELAY: 0.5s - 1.0s delay to prevent Rate Limiting (429 Errors)
-        const randomDelay = Math.floor(Math.random() * 500) + 500;
+        // DELAY: Random delay to prevent rate limits
+        const randomDelay = Math.floor(Math.random() * 300) + 200;
         await new Promise(r => setTimeout(r, randomDelay));
 
-        // 1. PROXY LIST (Removed blocked 'corsproxy.io')
-        const allProxies = [
-            'https://api.codetabs.com/v1/proxy?quest=', // Primary (Most reliable)
-            'https://api.allorigins.win/raw?url=',      // Secondary
-            'https://thingproxy.freeboard.io/fetch/'    // Tertiary
+        // 1. PROXY LIST (Removed blocked 'corsproxy.io' and dead 'thingproxy')
+        const proxies = [
+            // CodeTabs: Currently the most reliable
+            { url: 'https://api.codetabs.com/v1/proxy?quest=', type: 'direct' },
+            // AllOrigins: Good backup (using 'get' endpoint for better error handling)
+            { url: 'https://api.allorigins.win/get?url=', type: 'json' },
+            // Direct Yahoo: Works if you have a CORS extension or run locally
+            { url: '', type: 'direct' } 
         ];
 
-        // Filter out known bad proxies
-        const activeProxies = allProxies.filter(p => !deadProxies.has(p));
-
-        // 2. ENDPOINTS (Rotate Query1 and Query2)
+        // 2. ENDPOINTS
         const endpoints = [
             'https://query1.finance.yahoo.com',
             'https://query2.finance.yahoo.com'
@@ -1196,36 +1196,43 @@
 
         // --- FETCH ENGINE ---
         async function tryFetch(path) {
-            for (const proxy of activeProxies) {
+            for (const proxy of proxies) {
                 for (const domain of endpoints) {
                     try {
                         const targetUrl = `${domain}${path}&_cb=${cacheBuster}`;
-                        const finalUrl = proxy + encodeURIComponent(targetUrl);
-                        
-                        const res = await fetchWithTimeout(finalUrl);
-                        
-                        // KILL SWITCH: If blocked (401/403) or Server Error (500), kill the proxy
-                        if (res.status === 401 || res.status === 403 || res.status === 500) {
-                            console.warn(`[Blocked] Disabling proxy: ${proxy}`);
-                            deadProxies.add(proxy);
-                            break; 
+                        let finalUrl = '';
+
+                        // Handle Proxy Construction
+                        if (proxy.url === '') { 
+                            finalUrl = targetUrl; // Direct Call
+                        } else {
+                            finalUrl = proxy.url + encodeURIComponent(targetUrl);
                         }
                         
+                        const res = await fetchWithTimeout(finalUrl);
                         if (!res.ok) continue;
 
                         const text = await res.text();
-                        
-                        // Parse JSON (Handle various proxy wrappers)
                         let data;
-                        try { data = JSON.parse(text); } catch(e) { continue; }
-                        if (data.contents) {
-                            try { data = JSON.parse(data.contents); } catch(e) { } 
-                        }
+
+                        // Parse based on Proxy Type
+                        try { 
+                            const json = JSON.parse(text);
+                            if (proxy.type === 'json') {
+                                // AllOrigins wraps response in { contents: "..." }
+                                if (json.contents) data = JSON.parse(json.contents);
+                            } else {
+                                // Direct/CodeTabs returns raw JSON
+                                data = json;
+                            }
+                        } catch(e) { continue; }
 
                         if (data.quoteResponse?.result?.length > 0) return data.quoteResponse.result[0];
                         if (data.chart?.result?.length > 0) return data.chart.result[0];
 
-                    } catch (e) { }
+                    } catch (e) { 
+                        // console.warn(`Failed: ${proxy.url}`);
+                    }
                 }
             }
             return null;
@@ -1235,7 +1242,6 @@
         const quoteData = await tryFetch(`/v7/finance/quote?symbols=${cleanTicker}`);
 
         // STEP B: GET CHART (History) - Only if needed
-        // We use 5y to ensure we can calculate 1D change accurately manually if needed
         const chartData = await tryFetch(`/v8/finance/chart/${cleanTicker}?range=5y&interval=1d`);
 
         if (!quoteData && !chartData) return null;
@@ -1244,7 +1250,7 @@
         let currentPrice = quoteData?.regularMarketPrice || chartData?.meta?.regularMarketPrice || 0;
         let prevClose = quoteData?.regularMarketPreviousClose || 0;
 
-        // Fallback for PrevClose (Critical for 1D Change accuracy)
+        // Fallback for PrevClose
         if (!prevClose && chartData && chartData.indicators.quote[0].close) {
             const closes = chartData.indicators.quote[0].close.filter(c => c !== null);
             if (closes.length >= 2) prevClose = closes[closes.length - 2];
@@ -1301,12 +1307,12 @@
     // UPDATED: Seamless background updates (No blocking UI)
     // UPDATED: Silent Background Updates
     // UPDATED: Seamless background updates (No blocking UI)
+    // UPDATED: Fail-safe update loop.
     async function updateWithLiveMarketData(accounts, isSilent = false) {
         if (isUpdating) return;
         isUpdating = true;
         
-        // We FORCE silent mode to prevent the "Stuck" overlay
-        // The user will see the dot pulse in the header instead
+        // Force silent to prevent UI blocking
         isSilent = true; 
 
         const headerStatus = document.getElementById('latest-date-display');
@@ -1316,7 +1322,7 @@
         if(btn) btn.innerHTML = "<i class='fas fa-sync fa-spin'></i>";
 
         try {
-            // 1. Update Watchlist
+            // 1. WATCHLIST
             if (typeof userWatchlist !== 'undefined') {
                 watchlistDataStore = [];
                 for (const ticker of userWatchlist) {
@@ -1333,36 +1339,38 @@
                 if (typeof renderWatchlistColumns === 'function') renderWatchlistColumns();
             }
 
-            // 2. Update Accounts
+            // 2. ACCOUNTS
             let totalDayChange = 0;
             let runningTotal = 0;
 
             for (const acc of accounts) {
-                // Identify Ticker
+                // Determine Ticker
                 const override = accountOverrides[acc.id];
                 let ticker = override ? override.ticker : (acc.data[acc.data.length-1]?.invested);
                 
                 if (acc.id.toLowerCase().includes('fidelity')) ticker = 'GOOGL';
                 if (acc.id.toLowerCase().includes('cash')) ticker = 'BIL';
 
-                if (!ticker || ticker === 'Unknown' || ticker === '-') continue;
+                // Skip manual accounts
+                if (!ticker || ticker === 'Unknown' || ticker === '-') {
+                     if(acc.value) runningTotal += acc.value; // Keep existing value
+                     continue;
+                }
 
-                // Fetch Data
+                // Fetch
                 const data = await getExtendedPerformance(ticker);
                 
                 if (data && data.price > 0) {
                     acc.livePrice = data.price;
                     acc.lastUpdated = data.ts;
                     
-                    // Assign Stats to all possible keys
+                    // Assign Stats
                     acc.stats = {
                         p1d: data.p1d,
                         p1w: data.p1w, p1m: data.p1m, p3m: data.p3m, 
                         p6m: data.p6m, p1y: data.p1y, p5y: data.p5y,
                         mtd: data.p1m
                     };
-                    
-                    // Direct property assignment for safety
                     acc.p1d = data.p1d; 
                     acc.dayChange = data.p1d;
 
@@ -1371,7 +1379,6 @@
                     if (override && override.qty) {
                         acc.value = data.price * override.qty;
                     } else if (lastMonth) {
-                         // Use stored MTD growth if available, else approx
                         const growth = data.p1m || 0; 
                         acc.value = lastMonth.balance * (1 + growth);
                     }
@@ -1381,10 +1388,13 @@
                          totalDayChange += gainAmt;
                          runningTotal += acc.value;
                     }
+                } else {
+                    // FAIL-SAFE: If fetch failed, keep existing value so Total doesn't drop to 0
+                    if(acc.value) runningTotal += acc.value;
                 }
             }
 
-            // 3. Update Headers
+            // 3. HEADERS
             const nw = document.getElementById('stat-networth');
             const dc = document.getElementById('stat-day-change');
             
@@ -1407,7 +1417,6 @@
                 headerStatus.innerHTML = `<span class='live-dot'></span> Live ${time}`;
             }
             
-            // Re-render Table
             if (typeof processAndRender === 'function') processAndRender(accounts, true);
         }
     }
@@ -2733,6 +2742,7 @@
 </script>
 </body>
 </html>
+
 
 
 
