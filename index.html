@@ -1150,6 +1150,7 @@
     // ==========================================
     // GLOBAL CIRCUIT BREAKER: Stops fetching if proxies are down to prevent freezing
     // UPDATED: Uses Query1/Query2 rotation and removes dead proxies
+    // UPDATED: Uses Query1/Query2 rotation and removes dead proxies
     async function getExtendedPerformance(ticker) {
         if (!ticker || ticker === 'Unknown' || ticker === '-') return null;
         const cleanTicker = TICKER_MAP[ticker] || ticker.split(' ')[0]; 
@@ -2721,6 +2722,7 @@
 </script>
 </body>
 </html>
+
 
 
 
