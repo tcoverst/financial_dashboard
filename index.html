@@ -1288,24 +1288,23 @@
     // UPDATED: Seamless Background Updates (No freezing/blocking UI)
     // UPDATED: Seamless background updates (No blocking UI)
     // UPDATED: Silent Background Updates
+    // UPDATED: Seamless background updates (No blocking UI)
     async function updateWithLiveMarketData(accounts, isSilent = false) {
         if (isUpdating) return;
         isUpdating = true;
         
-        // Setup UI Elements
+        // We FORCE silent mode to prevent the "Stuck" overlay
+        // The user will see the dot pulse in the header instead
+        isSilent = true; 
+
         const headerStatus = document.getElementById('latest-date-display');
         const btn = document.getElementById('manual-refresh-btn');
-        const statusDiv = document.getElementById('loading'); // Use for error messages only
         
-        // Visual Feedback (Header Dot)
         if(headerStatus) headerStatus.innerHTML = "<span class='live-dot' style='background:orange'></span> Updating...";
         if(btn) btn.innerHTML = "<i class='fas fa-sync fa-spin'></i>";
-        
-        // HIDE full screen loader if it was active
-        if(statusDiv) statusDiv.style.opacity = '0';
 
         try {
-            // 1. UPDATE WATCHLIST
+            // 1. Update Watchlist
             if (typeof userWatchlist !== 'undefined') {
                 watchlistDataStore = [];
                 for (const ticker of userWatchlist) {
@@ -1322,45 +1321,45 @@
                 if (typeof renderWatchlistColumns === 'function') renderWatchlistColumns();
             }
 
-            // 2. UPDATE ACCOUNTS
+            // 2. Update Accounts
             let totalDayChange = 0;
             let runningTotal = 0;
 
             for (const acc of accounts) {
-                // Find Ticker
+                // Identify Ticker
                 const override = accountOverrides[acc.id];
                 let ticker = override ? override.ticker : (acc.data[acc.data.length-1]?.invested);
                 
                 if (acc.id.toLowerCase().includes('fidelity')) ticker = 'GOOGL';
                 if (acc.id.toLowerCase().includes('cash')) ticker = 'BIL';
 
-                if (!ticker || ticker === 'Unknown' || ticker === '-') {
-                    // Even if no ticker, add to total
-                    if(acc.data.length > 0) runningTotal += acc.data[acc.data.length-1].balance;
-                    continue;
-                }
+                if (!ticker || ticker === 'Unknown' || ticker === '-') continue;
 
-                // Fetch
+                // Fetch Data
                 const data = await getExtendedPerformance(ticker);
                 
                 if (data && data.price > 0) {
                     acc.livePrice = data.price;
                     acc.lastUpdated = data.ts;
                     
-                    // Assign Stats
+                    // Assign Stats to all possible keys
                     acc.stats = {
                         p1d: data.p1d,
                         p1w: data.p1w, p1m: data.p1m, p3m: data.p3m, 
                         p6m: data.p6m, p1y: data.p1y, p5y: data.p5y,
                         mtd: data.p1m
                     };
+                    
+                    // Direct property assignment for safety
                     acc.p1d = data.p1d; 
+                    acc.dayChange = data.p1d;
 
                     // Update Balance
                     const lastMonth = acc.data[acc.data.length-1];
                     if (override && override.qty) {
                         acc.value = data.price * override.qty;
                     } else if (lastMonth) {
+                         // Use stored MTD growth if available, else approx
                         const growth = data.p1m || 0; 
                         acc.value = lastMonth.balance * (1 + growth);
                     }
@@ -1370,9 +1369,6 @@
                          totalDayChange += gainAmt;
                          runningTotal += acc.value;
                     }
-                } else {
-                    // Fallback if fetch fails: Use last known balance
-                    if(acc.data.length > 0) runningTotal += acc.data[acc.data.length-1].balance;
                 }
             }
 
@@ -1389,7 +1385,7 @@
             }
 
         } catch (e) {
-            console.warn("Background Update Failed:", e);
+            console.error("Update failed:", e);
         } finally {
             isUpdating = false;
             
@@ -1399,6 +1395,7 @@
                 headerStatus.innerHTML = `<span class='live-dot'></span> Live ${time}`;
             }
             
+            // Re-render Table
             if (typeof processAndRender === 'function') processAndRender(accounts, true);
         }
     }
@@ -2724,6 +2721,7 @@
 </script>
 </body>
 </html>
+
 
 
 
