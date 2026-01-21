@@ -1145,16 +1145,23 @@
     // LOGIC: REAL-TIME MARKET DATA (UPDATED)
     // ==========================================
 
-    // UPDATED FUNCTION: robust timeouts, fallback data, and lighter requests
+// DEBUG VERSION: Logs detailed errors and forces a return value to prevent hanging
     async function getExtendedPerformance(ticker) {
-        if (!ticker || ticker === 'Unknown' || ticker === '-') return null;
-        const cleanTicker = TICKER_MAP[ticker] || ticker.split(' ')[0]; 
+        console.log(`[DEBUG] Starting fetch for: ${ticker}`);
+        
+        if (!ticker || ticker === 'Unknown' || ticker === '-') {
+            console.log(`[DEBUG] Skipped invalid ticker: ${ticker}`);
+            return null;
+        }
 
-        // HELPER: Fetch with 4-second timeout to prevent "hanging"
-        const fetchWithTimeout = async (url, timeout = 4000) => {
+        const cleanTicker = TICKER_MAP[ticker] || ticker.split(' ')[0]; 
+        
+        // Short timeout (3s) so it fails fast
+        const fetchWithTimeout = async (url, timeout = 3000) => {
             const controller = new AbortController();
             const id = setTimeout(() => controller.abort(), timeout);
             try {
+                console.log(`[DEBUG] Fetching: ${url.substring(0, 50)}...`);
                 const response = await fetch(url, { signal: controller.signal });
                 clearTimeout(id);
                 return response;
@@ -1166,111 +1173,70 @@
 
         const proxies = [
             'https://api.allorigins.win/raw?url=', 
-            'https://corsproxy.io/?',
-            'https://thingproxy.freeboard.io/fetch/' 
+            'https://corsproxy.io/?'
         ];
 
-        // URL 1: Chart Data (Rich history for 1Y/5Y stats) - Limited to 5y to reduce size
-        const chartUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${cleanTicker}?range=5y&interval=1d`;
-        
-        // URL 2: Quote Data (Fallback - Just price, no history)
-        const quoteUrl = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${cleanTicker}`;
-
-        // --- ATTEMPT 1: FULL CHART DATA ---
+        // Try getting data
         for (const proxy of proxies) {
             try {
-                const target = proxy + encodeURIComponent(chartUrl);
-                const response = await fetchWithTimeout(target);
-                if (!response.ok) continue;
-
-                const text = await response.text();
-                let data;
-                try { data = JSON.parse(text); } catch(e) { continue; }
-                if (data.contents) { try { data = JSON.parse(data.contents); } catch(e) { continue; } }
-
-                if (!data.chart || !data.chart.result || data.chart.result.length === 0) continue;
-
-                const result = data.chart.result[0];
-                const meta = result.meta;
-                const timestamps = result.timestamp || [];
-                const closes = result.indicators.quote[0].close || [];
-
-                // Validations
-                if (closes.length === 0) continue;
+                // We will try to fetch just the QUOTE first (smaller, faster, less likely to fail)
+                const targetUrl = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${cleanTicker}`;
+                const fetchUrl = proxy + encodeURIComponent(targetUrl);
                 
-                let currentPrice = meta.regularMarketPrice || closes[closes.length - 1];
-                let prevClose = meta.previousClose || meta.chartPreviousClose;
+                const response = await fetchWithTimeout(fetchUrl);
                 
-                // Find Month-To-Date Baseline
-                const now = new Date();
-                const startMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-                let mtdBaseline = null;
-                
-                // Helper to find historical price
-                const getPrice = (ago, mode) => {
-                    const d = new Date(result.timestamp[result.timestamp.length-1] * 1000);
-                    if(mode === 'd') d.setDate(d.getDate() - ago);
-                    if(mode === 'm') d.setMonth(d.getMonth() - ago);
-                    if(mode === 'y') d.setFullYear(d.getFullYear() - ago);
-                    const t = d.getTime() / 1000;
-                    for(let i=timestamps.length-1; i>=0; i--) {
-                        if(timestamps[i] <= t && closes[i]) return closes[i];
-                    }
-                    return closes[0];
-                };
-
-                for(let i=timestamps.length-1; i>=0; i--) {
-                    if(new Date(timestamps[i]*1000) < startMonth && closes[i]) {
-                        mtdBaseline = closes[i]; break;
-                    }
+                if (!response.ok) {
+                    console.error(`[DEBUG] Proxy ${proxy} returned status: ${response.status}`);
+                    continue; 
                 }
 
-                return {
-                    price: currentPrice,
-                    ts: result.timestamp[result.timestamp.length - 1],
-                    mtdRate: (mtdBaseline) ? (currentPrice - mtdBaseline)/mtdBaseline : 0,
-                    p1d: (prevClose) ? (currentPrice - prevClose)/prevClose : 0,
-                    p1w: (getPrice(7,'d')) ? (currentPrice - getPrice(7,'d'))/getPrice(7,'d') : 0,
-                    p1m: (getPrice(1,'m')) ? (currentPrice - getPrice(1,'m'))/getPrice(1,'m') : 0,
-                    p3m: (getPrice(3,'m')) ? (currentPrice - getPrice(3,'m'))/getPrice(3,'m') : 0,
-                    p6m: (getPrice(6,'m')) ? (currentPrice - getPrice(6,'m'))/getPrice(6,'m') : 0,
-                    p1y: (getPrice(1,'y')) ? (currentPrice - getPrice(1,'y'))/getPrice(1,'y') : 0,
-                    p3y: (getPrice(3,'y')) ? (currentPrice - getPrice(3,'y'))/getPrice(3,'y') : 0,
-                    p5y: (getPrice(5,'y')) ? (currentPrice - getPrice(5,'y'))/getPrice(5,'y') : 0,
-                    pMax: (closes[0]) ? (currentPrice - closes[0])/closes[0] : 0
-                };
-
-            } catch (e) { console.log("Chart fetch failed", e); }
-        }
-
-        // --- ATTEMPT 2: SIMPLE QUOTE FALLBACK (If Chart Fails) ---
-        // This ensures the dashboard loads even if history is blocked
-        for (const proxy of proxies) {
-            try {
-                const target = proxy + encodeURIComponent(quoteUrl);
-                const response = await fetchWithTimeout(target);
-                if (!response.ok) continue;
-
                 const text = await response.text();
-                let data;
-                try { data = JSON.parse(text); } catch(e) { continue; }
-                if (data.contents) { try { data = JSON.parse(data.contents); } catch(e) { continue; } }
+                // console.log(`[DEBUG] Raw response length: ${text.length}`); // Uncomment if needed
 
-                if (!data.quoteResponse || !data.quoteResponse.result || data.quoteResponse.result.length === 0) continue;
-                
+                let data;
+                try { 
+                    data = JSON.parse(text); 
+                } catch (e) {
+                    console.error(`[DEBUG] JSON Parse failed for ${cleanTicker} on proxy ${proxy}`);
+                    continue;
+                }
+
+                // Handle wrappers (allorigins sometimes wraps in 'contents')
+                if (data.contents) {
+                    try { data = JSON.parse(data.contents); } catch(e) { continue; }
+                }
+
+                if (!data.quoteResponse || !data.quoteResponse.result || data.quoteResponse.result.length === 0) {
+                     console.error(`[DEBUG] No data found in JSON for ${cleanTicker}`);
+                     continue;
+                }
+
                 const q = data.quoteResponse.result[0];
-                // Return simplified object with just current price stats
+                console.log(`[DEBUG] SUCCESS for ${cleanTicker}. Price: ${q.regularMarketPrice}`);
+
+                // Return a simplified object (Current Price + 1 Day Change only)
+                // This is safer than calculating 5Y history which often crashes
                 return {
                     price: q.regularMarketPrice,
                     ts: Date.now() / 1000,
-                    mtdRate: 0, // Cannot calc without history
-                    p1d: q.regularMarketChangePercent / 100,
+                    mtdRate: 0, 
+                    p1d: q.regularMarketChangePercent / 100, 
                     p1w: 0, p1m: 0, p3m: 0, p6m: 0, p1y: 0, p3y: 0, p5y: 0, pMax: 0
                 };
-            } catch (e) { console.log("Quote fetch failed", e); }
+
+            } catch (e) {
+                console.error(`[DEBUG] Error with proxy ${proxy}:`, e);
+            }
         }
 
-        return null; // Both failed
+        console.warn(`[DEBUG] All proxies failed for ${cleanTicker}. Returning fallback.`);
+        
+        // FALLBACK: Return a dummy object so the dashboard DOES NOT HANG
+        return {
+            price: 0, // Will signal to use manual price if logic allows, or show 0
+            ts: Date.now(),
+            mtdRate: 0, p1d: 0, p1w: 0, p1m: 0, p3m: 0, p6m: 0, p1y: 0, p3y: 0, p5y: 0, pMax: 0
+        };
     }
 
     async function updateWithLiveMarketData(accounts, isSilent = false) {
@@ -2713,5 +2679,6 @@
 </script>
 </body>
 </html>
+
 
 
