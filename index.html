@@ -1151,15 +1151,19 @@
     // GLOBAL CIRCUIT BREAKER: Stops fetching if proxies are down to prevent freezing
     // UPDATED: Uses Query1/Query2 rotation and removes dead proxies
     // UPDATED: Uses Query1/Query2 rotation and removes dead proxies
+    // GLOBAL STATE: Tracks which proxies are "Dead" to avoid retrying them
+    const deadProxies = new Set();
+
+    // UPDATED: Smart Proxy Rotator with "Kill Switch" for blocked proxies
     async function getExtendedPerformance(ticker) {
         if (!ticker || ticker === 'Unknown' || ticker === '-') return null;
         const cleanTicker = TICKER_MAP[ticker] || ticker.split(' ')[0]; 
         
-        // Cache Buster: Change only once per minute to prevent proxy bans
+        // Cache Buster: Updates every 60s to prevent stale data but avoid spamming
         const cacheBuster = Math.floor(Date.now() / 60000); 
 
         // TIMEOUT HELPER
-        const fetchWithTimeout = async (url, timeout = 4000) => {
+        const fetchWithTimeout = async (url, timeout = 5000) => {
             const controller = new AbortController();
             const id = setTimeout(() => controller.abort(), timeout);
             try {
@@ -1169,14 +1173,21 @@
             } catch (err) { clearTimeout(id); throw err; }
         };
 
-        // 1. PROXY LIST (Removed dead 'thingproxy')
-        const proxies = [
-            'https://corsproxy.io/?',              // Fastest if working
-            'https://api.allorigins.win/raw?url=', // Good fallback
-            'https://api.codetabs.com/v1/proxy?quest=' // Strict parsing
+        // DELAY: Essential for sequential processing
+        const randomDelay = Math.floor(Math.random() * 500) + 200;
+        await new Promise(r => setTimeout(r, randomDelay));
+
+        // 1. PROXY LIST (Prioritized)
+        const allProxies = [
+            'https://api.codetabs.com/v1/proxy?quest=', // Best chance
+            'https://api.allorigins.win/raw?url=',      // Good backup
+            'https://corsproxy.io/?'                    // Last resort (Currently blocking you)
         ];
 
-        // 2. ENDPOINTS (Rotates between query1 and query2 to bypass blocks)
+        // Filter out proxies that have already failed with 401/403
+        const activeProxies = allProxies.filter(p => !deadProxies.has(p));
+
+        // 2. ENDPOINTS (Yahoo has two identical servers)
         const endpoints = [
             'https://query1.finance.yahoo.com',
             'https://query2.finance.yahoo.com'
@@ -1185,11 +1196,9 @@
         let quoteData = null;
         let chartData = null;
 
-        // --- FETCH LOGIC ---
-        // We try proxies sequentially. Inside each proxy, we try endpoints.
-        
+        // --- FETCH ENGINE ---
         async function tryFetch(path) {
-            for (const proxy of proxies) {
+            for (const proxy of activeProxies) {
                 for (const domain of endpoints) {
                     try {
                         // Construct URL
@@ -1197,34 +1206,42 @@
                         const finalUrl = proxy + encodeURIComponent(targetUrl);
                         
                         const res = await fetchWithTimeout(finalUrl);
+                        
+                        // KILL SWITCH: If blocked, mark proxy as dead
+                        if (res.status === 401 || res.status === 403) {
+                            console.warn(`[Blocked] Disabling proxy: ${proxy}`);
+                            deadProxies.add(proxy);
+                            break; // Stop using this proxy immediately
+                        }
+                        
                         if (!res.ok) continue;
 
                         const text = await res.text();
                         
-                        // Parse JSON (Handle various proxy wrappers)
+                        // Parse JSON (Handle wrappers)
                         let data;
                         try { data = JSON.parse(text); } catch(e) { continue; }
                         if (data.contents) {
                             try { data = JSON.parse(data.contents); } catch(e) { } 
                         }
 
-                        // Success Checks
+                        // Validation
                         if (data.quoteResponse?.result?.length > 0) return data.quoteResponse.result[0];
                         if (data.chart?.result?.length > 0) return data.chart.result[0];
 
                     } catch (e) { 
-                        // console.warn(`Failed: ${proxy} -> ${domain}`); 
+                        // Network error, try next combination
                     }
                 }
             }
             return null;
         }
 
-        // 1. GET QUOTE (Price)
+        // STEP A: GET QUOTE (Price)
         quoteData = await tryFetch(`/v7/finance/quote?symbols=${cleanTicker}`);
 
-        // 2. GET CHART (History) - Only if Quote didn't provide everything we need
-        // We fetch 5y to ensure we have enough data for the 1D calc if needed
+        // STEP B: GET CHART (History) - Only if Quote didn't provide everything or we need history
+        // 5y range is safer than 'max'
         chartData = await tryFetch(`/v8/finance/chart/${cleanTicker}?range=5y&interval=1d`);
 
         if (!quoteData && !chartData) return null;
@@ -1233,13 +1250,13 @@
         let currentPrice = quoteData?.regularMarketPrice || chartData?.meta?.regularMarketPrice || 0;
         let prevClose = quoteData?.regularMarketPreviousClose || 0;
 
-        // Fallback for PrevClose (Critical for 1D Change)
+        // Fallback for PrevClose (Critical for 1D Change accuracy)
         if (!prevClose && chartData && chartData.indicators.quote[0].close) {
             const closes = chartData.indicators.quote[0].close.filter(c => c !== null);
             if (closes.length >= 2) prevClose = closes[closes.length - 2];
         }
 
-        // Manual 1D Calculation
+        // Manual 1D Calculation (Prevents 0.00% bug)
         let p1d = 0;
         if (currentPrice && prevClose) p1d = (currentPrice - prevClose) / prevClose;
 
@@ -2722,6 +2739,7 @@
 </script>
 </body>
 </html>
+
 
 
 
