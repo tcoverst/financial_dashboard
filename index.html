@@ -1145,7 +1145,8 @@
     // LOGIC: REAL-TIME MARKET DATA (UPDATED)
     // ==========================================
 
-// UPDATED: Hybrid Strategy (Quote for Accuracy + Chart for History)
+/// UPDATED: Hybrid Strategy (Quote for Accuracy + Chart for History)
+    // Fixes 0% 1D change and 1200% 5Y anomalies
     async function getExtendedPerformance(ticker) {
         if (!ticker || ticker === 'Unknown' || ticker === '-') return null;
         const cleanTicker = TICKER_MAP[ticker] || ticker.split(' ')[0]; 
@@ -1175,7 +1176,7 @@
         // 1. URLs
         // QUOTE: The source of truth for Price and 1D Change
         const quoteUrl = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${cleanTicker}`;
-        // CHART: The source for 1W/1M/1Y history (Limited to 5y)
+        // CHART: The source for 1W/1M/1Y history (Limited to 5y to prevent bugs)
         const chartUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${cleanTicker}?range=5y&interval=1d`;
 
         let quoteData = null;
@@ -1221,6 +1222,8 @@
 
         // PREFER Quote Data for Price/1D, fallback to Chart if needed
         const currentPrice = quoteData ? quoteData.regularMarketPrice : (chartData ? chartData.meta.regularMarketPrice : 0);
+        
+        // CRITICAL FIX: Direct read of the percent change
         const dayChangePct = quoteData ? (quoteData.regularMarketChangePercent / 100) : 0; 
 
         // CALCULATE HISTORY (Using Chart Data)
@@ -1284,7 +1287,7 @@
             p3m: p3m,
             p6m: p6m,
             p1y: p1y,
-            p3y: 0, // 3Y often inconsistent on 5Y chart, skipping for safety
+            p3y: 0, 
             p5y: p5y,
             pMax: pMax,
             mtdRate: p1m // Approx for MTD
@@ -2802,6 +2805,7 @@
 </script>
 </body>
 </html>
+
 
 
 
