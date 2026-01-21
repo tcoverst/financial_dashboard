@@ -1145,12 +1145,14 @@
     // LOGIC: REAL-TIME MARKET DATA (UPDATED)
     // ==========================================
 
-// UPDATED: Manually calculates 1D change to prevent "0.00%" error
+/// ==========================================
+    // 1. ROBUST FETCH FUNCTION (Manual Calc Fix)
+    // ==========================================
     async function getExtendedPerformance(ticker) {
         if (!ticker || ticker === 'Unknown' || ticker === '-') return null;
         const cleanTicker = TICKER_MAP[ticker] || ticker.split(' ')[0]; 
 
-        // TIMEOUT HELPER
+        // Helper: Fetch with Timeout
         const fetchWithTimeout = async (url, timeout = 3000) => {
             const controller = new AbortController();
             const id = setTimeout(() => controller.abort(), timeout);
@@ -1164,6 +1166,7 @@
             }
         };
 
+        // Delay to prevent rate-limiting
         const randomDelay = Math.floor(Math.random() * 300) + 100;
         await new Promise(r => setTimeout(r, randomDelay));
 
@@ -1172,137 +1175,102 @@
             'https://api.allorigins.win/raw?url='
         ];
 
-        // 1. URLs
+        // We fetch BOTH Quote (Price) and Chart (History) to be safe
         const quoteUrl = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${cleanTicker}`;
         const chartUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${cleanTicker}?range=5y&interval=1d`;
 
         let quoteData = null;
         let chartData = null;
 
-        // 2. FETCH QUOTE (Source of Truth for Price)
+        // A. Fetch Quote
         for (const proxy of proxies) {
             try {
-                const response = await fetchWithTimeout(proxy + encodeURIComponent(quoteUrl));
-                if (!response.ok) continue;
-                const text = await response.text();
-                let data;
-                try { data = JSON.parse(text); } catch(e) { continue; }
-                if (data.contents) try { data = JSON.parse(data.contents); } catch(e) { continue; }
-                
-                if (data.quoteResponse && data.quoteResponse.result && data.quoteResponse.result.length > 0) {
+                const res = await fetchWithTimeout(proxy + encodeURIComponent(quoteUrl));
+                if (!res.ok) continue;
+                const json = await res.json();
+                const data = json.contents ? JSON.parse(json.contents) : json; // Handle AllOrigins wrapper
+                if (data.quoteResponse && data.quoteResponse.result.length > 0) {
                     quoteData = data.quoteResponse.result[0];
-                    break; 
+                    break;
                 }
-            } catch (e) { console.warn(`Quote fail ${cleanTicker}`); }
+            } catch (e) { }
         }
 
-        // 3. FETCH CHART (Source of Truth for History)
+        // B. Fetch Chart
         for (const proxy of proxies) {
             try {
-                const response = await fetchWithTimeout(proxy + encodeURIComponent(chartUrl));
-                if (!response.ok) continue;
-                const text = await response.text();
-                let data;
-                try { data = JSON.parse(text); } catch(e) { continue; }
-                if (data.contents) try { data = JSON.parse(data.contents); } catch(e) { continue; }
-                
-                if (data.chart && data.chart.result && data.chart.result.length > 0) {
+                const res = await fetchWithTimeout(proxy + encodeURIComponent(chartUrl));
+                if (!res.ok) continue;
+                const json = await res.json();
+                const data = json.contents ? JSON.parse(json.contents) : json;
+                if (data.chart && data.chart.result.length > 0) {
                     chartData = data.chart.result[0];
                     break;
                 }
-            } catch (e) { console.warn(`Chart fail ${cleanTicker}`); }
+            } catch (e) { }
         }
 
-        // 4. COMBINE & CALCULATE
         if (!quoteData && !chartData) return null;
 
-        // A. DETERMINE PRICE
-        const currentPrice = quoteData ? quoteData.regularMarketPrice : (chartData ? chartData.meta.regularMarketPrice : 0);
+        // --- C. CRITICAL: DETERMINE PRICE & PREV CLOSE ---
+        const currentPrice = quoteData?.regularMarketPrice || chartData?.meta?.regularMarketPrice || 0;
         
-        // B. DETERMINE PREVIOUS CLOSE (Essential for 1D Change)
-        // We prioritize the Quote API's 'regularMarketPreviousClose'
-        let prevClose = quoteData ? quoteData.regularMarketPreviousClose : 0;
-        
-        // Fallback to Chart meta if Quote is missing it
-        if (!prevClose && chartData && chartData.meta) {
-            prevClose = chartData.meta.chartPreviousClose || chartData.meta.previousClose;
-        }
+        // We look for Previous Close in multiple places to ensure we find it
+        let prevClose = quoteData?.regularMarketPreviousClose || 
+                        chartData?.meta?.chartPreviousClose || 
+                        chartData?.meta?.previousClose || 0;
 
-        // C. MANUAL CALCULATION (Fixes the 0.00% bug)
-        // If we have both numbers, we calculate it ourselves. This cannot return 0 unless price hasn't moved.
-        let dayChangePct = 0;
+        // MANUAL CALCULATION: (Price - Prev) / Prev
+        // This is the only way to guarantee 0.00% is not returned erroneously
+        let p1d = 0;
         if (currentPrice && prevClose) {
-            dayChangePct = (currentPrice - prevClose) / prevClose;
-        } else if (quoteData && quoteData.regularMarketChangePercent) {
-             // Backup: Use API field if we couldn't find prevClose (divided by 100 just in case)
-             dayChangePct = quoteData.regularMarketChangePercent / 100;
+            p1d = (currentPrice - prevClose) / prevClose;
         }
 
-        // D. HISTORY CALCS (Chart Data)
+        // --- D. HISTORY METRICS (From Chart) ---
         let p1w=0, p1m=0, p3m=0, p6m=0, p1y=0, p5y=0, pMax=0;
-        
-        if (chartData && chartData.timestamp && chartData.indicators.quote[0].close) {
-            const timestamps = chartData.timestamp;
-            const closes = chartData.indicators.quote[0].close;
-            const cleanT = [];
-            const cleanC = [];
-            closes.forEach((c, i) => {
-                if (c !== null && c !== undefined) {
-                    cleanT.push(timestamps[i]);
-                    cleanC.push(c);
-                }
-            });
+        if (chartData && chartData.timestamp) {
+            const adjClose = chartData.indicators.quote[0].close;
+            const times = chartData.timestamp;
+            
+            // Filter nulls
+            const cleanC = []; const cleanT = [];
+            adjClose.forEach((c, i) => { if(c) { cleanC.push(c); cleanT.push(times[i]); }});
 
-            if (cleanC.length > 0) {
-                const getPriceAgo = (amt, mode) => {
-                    const lastTs = cleanT[cleanT.length-1];
-                    const d = new Date(lastTs * 1000);
-                    if(mode === 'd') d.setDate(d.getDate() - amt);
-                    if(mode === 'm') d.setMonth(d.getMonth() - amt);
-                    if(mode === 'y') d.setFullYear(d.getFullYear() - amt);
-                    const t = d.getTime() / 1000;
-                    for(let i=cleanT.length-1; i>=0; i--) {
-                        if(cleanT[i] <= t) return cleanC[i];
-                    }
+            if(cleanC.length > 0) {
+                const getPriceAgo = (days) => {
+                    const target = cleanT[cleanT.length-1] - (days * 86400);
+                    for(let i=cleanT.length-1; i>=0; i--) { if(cleanT[i] <= target) return cleanC[i]; }
                     return cleanC[0];
                 };
-
-                const base = currentPrice; 
-                const p1wVal = getPriceAgo(7, 'd');
-                const p1mVal = getPriceAgo(1, 'm');
-                const p3mVal = getPriceAgo(3, 'm');
-                const p6mVal = getPriceAgo(6, 'm');
-                const p1yVal = getPriceAgo(1, 'y');
-                const p5yVal = getPriceAgo(5, 'y');
-                const pMaxVal = cleanC[0];
-
-                p1w = p1wVal ? (base - p1wVal)/p1wVal : 0;
-                p1m = p1mVal ? (base - p1mVal)/p1mVal : 0;
-                p3m = p3mVal ? (base - p3mVal)/p3mVal : 0;
-                p6m = p6mVal ? (base - p6mVal)/p6mVal : 0;
-                p1y = p1yVal ? (base - p1yVal)/p1yVal : 0;
-                p5y = p5yVal ? (base - p5yVal)/p5yVal : 0;
-                pMax = pMaxVal ? (base - pMaxVal)/pMaxVal : 0;
+                const base = currentPrice;
+                const v1w = getPriceAgo(7);
+                const v1m = getPriceAgo(30);
+                const v3m = getPriceAgo(90);
+                const v6m = getPriceAgo(180);
+                const v1y = getPriceAgo(365);
+                const v5y = getPriceAgo(1825);
+                
+                if(v1w) p1w = (base - v1w)/v1w;
+                if(v1m) p1m = (base - v1m)/v1m;
+                if(v3m) p3m = (base - v3m)/v3m;
+                if(v6m) p6m = (base - v6m)/v6m;
+                if(v1y) p1y = (base - v1y)/v1y;
+                if(v5y) p5y = (base - v5y)/v5y;
             }
         }
 
-        return {
-            price: currentPrice,
-            ts: Date.now() / 1000,
-            p1d: dayChangePct, // Now manually calculated
-            p1w: p1w,
-            p1m: p1m,
-            p3m: p3m,
-            p6m: p6m,
-            p1y: p1y,
-            p3y: 0,
-            p5y: p5y,
-            pMax: pMax,
-            mtdRate: p1m 
+        return { 
+            price: currentPrice, 
+            ts: Date.now(), 
+            p1d: p1d, // Verified Decimal (e.g., 0.024 for 2.4%)
+            p1w, p1m, p3m, p6m, p1y, p5y, pMax 
         };
     }
-    // COMPLETED FUNCTION: Sequentially updates Watchlist AND Accounts
-    // Fixes "accounts is not defined" and ensures correct 1D/1W values
+
+    // ==========================================
+    // 2. MAIN UPDATE FUNCTION ("Shotgun" Fix)
+    // ==========================================
     async function updateWithLiveMarketData(accounts, isSilent = false) {
         if (isUpdating) return;
         isUpdating = true;
@@ -1311,192 +1279,120 @@
         const headerStatus = document.getElementById('latest-date-display');
         const btn = document.getElementById('manual-refresh-btn');
         
-        // 1. UI Feedback
-        if (!isSilent) {
-            if(statusDiv) {
-                statusDiv.style.opacity = '1';
-                statusDiv.style.display = 'flex';
-                statusDiv.innerHTML = "Fetching Real-Time Market Data...<br><span style='font-size:0.8em; font-weight:normal'>Updating One-by-One for accuracy...</span>";
-            }
-        } else {
-            if(headerStatus) headerStatus.innerHTML = "<span class='live-dot'></span> Updating...";
-            if(btn) btn.innerHTML = "<span>↻</span> ...";
+        // UI STATUS
+        if (!isSilent && statusDiv) {
+            statusDiv.style.display = 'flex';
+            statusDiv.style.opacity = '1';
+            statusDiv.innerHTML = "Fetching Market Data...<br><span style='font-size:0.8em'>Correcting 1D Values...</span>";
+        } else if (btn) {
+            btn.innerHTML = "<span>↻</span> ...";
         }
-        
-        const now = new Date();
-        const currentYear = now.getFullYear();
-        const currentMonthVal = now.getMonth() + 1; 
-        const currentMonthKey = `${currentYear}-${String(currentMonthVal).padStart(2, '0')}`;
-        
-        try {
-            // --- 2. UPDATE WATCHLIST (Sequential) ---
-            watchlistDataStore = [];
-            // Assuming 'userWatchlist' is your global array of tickers like ['NVDA', 'TSLA']
-            if (typeof userWatchlist !== 'undefined' && userWatchlist.length > 0) {
-                 for (const ticker of userWatchlist) {
-                     const data = await getExtendedPerformance(ticker);
-                     if(data && data.price > 0) {
-                         watchlistDataStore.push({
-                             ticker: ticker,
-                             price: data.price,
-                             dayChange: data.p1d, // Correctly from Quote API
-                             p1w: data.p1w, p1m: data.p1m, p3m: data.p3m, 
-                             p6m: data.p6m, p1y: data.p1y, p3y: data.p3y, 
-                             p5y: data.p5y, pMax: data.pMax
-                         });
-                     }
-                 }
-                 if (typeof renderWatchlistColumns === 'function') renderWatchlistColumns();
-            }
 
-            // --- 3. UPDATE ACCOUNTS (Sequential) ---
-            let runningTotal = 0;
-            let totalDayChange = 0;
-            
-            for (const acc of accounts) {
-                if (!acc.data || acc.data.length === 0) continue;
-                
-                // A. Find Baseline (Last Month's Entry)
-                const startOfThisMonth = new Date(currentYear, currentMonthVal - 1, 1);
-                let baselineEntry = null;
-                // Look backwards for the most recent entry BEFORE this month
-                for (let i = acc.data.length - 1; i >= 0; i--) {
-                    if (acc.data[i].dateObj < startOfThisMonth) {
-                        baselineEntry = acc.data[i];
-                        break;
+        try {
+            // 1. Update Watchlist
+            if (typeof userWatchlist !== 'undefined') {
+                watchlistDataStore = [];
+                for (const ticker of userWatchlist) {
+                    const data = await getExtendedPerformance(ticker);
+                    if(data) {
+                        watchlistDataStore.push({
+                            ticker: ticker, price: data.price,
+                            dayChange: data.p1d, // Watchlist usually looks for dayChange
+                            p1w: data.p1w, p1m: data.p1m, p3m: data.p3m, 
+                            p6m: data.p6m, p1y: data.p1y, p5y: data.p5y
+                        });
                     }
                 }
-                if (!baselineEntry) continue; // Cannot calculate live gain without baseline
+                if (typeof renderWatchlistColumns === 'function') renderWatchlistColumns();
+            }
 
-                // B. Get or Create Live Entry for Current Month
-                let liveEntry = acc.data.find(d => d.key === currentMonthKey);
-                let isNewRow = false;
+            // 2. Update Accounts
+            let totalDayChange = 0;
+            let runningTotal = 0;
 
-                if (!liveEntry) {
-                    isNewRow = true;
-                    liveEntry = {
-                        key: currentMonthKey,
-                        dateObj: startOfThisMonth,
-                        deposits: 0, income: 0, marketGain: 0,
-                        cumulative: baselineEntry.cumulative,
-                        balance: baselineEntry.balance,
-                        invested: baselineEntry.invested,
-                        rawWithdrawals: 0, isLive: true, isError: false, timestamp: 0 
-                    };
-                }
-
-                // C. Determine Ticker
+            for (const acc of accounts) {
+                // Determine Ticker
                 const override = accountOverrides[acc.id];
-                let ticker = override ? override.ticker : liveEntry.invested;
-                // Fallbacks for known accounts if ticker is missing
-                if(!ticker || ticker === '-') {
-                    if (acc.id.toLowerCase().includes('fidelity')) ticker = 'GOOGL'; // Example
-                    if (acc.id.toLowerCase().includes('cash')) ticker = 'BIL'; 
-                }
-
-                // D. Update UI Status
-                if(!isSilent && statusDiv) {
-                     statusDiv.innerHTML = `Fetching Real-Time Market Data...<br><span style='font-size:0.8em'>Updating ${acc.name} (${ticker || 'Manual'})...</span>`;
-                }
-
-                // E. Fetch Data
-                // Skip fetch if manual/cash account
-                if (!ticker || ticker === 'Unknown' || ticker === '-') {
-                     // Even if no fetch, we preserve the baseline logic
-                     if (isNewRow) acc.data.push(liveEntry);
-                     continue; 
-                }
-
-                const marketData = await getExtendedPerformance(ticker);
+                let ticker = override ? override.ticker : (acc.data[acc.data.length-1]?.invested);
                 
-                if (marketData && marketData.price > 0) {
-                    liveEntry.isError = false;
-                    liveEntry.timestamp = marketData.ts;
-                    acc.livePrice = marketData.price;
-                    acc.lastUpdated = marketData.ts;
+                // Fallbacks
+                if (acc.id.toLowerCase().includes('fidelity')) ticker = 'GOOGL';
+                if (acc.id.toLowerCase().includes('cash')) ticker = 'BIL';
 
-                    // STORE STATS (Crucial for the Columns 1D, 1W, etc.)
+                if (!ticker || ticker === 'Unknown' || ticker === '-') continue;
+
+                if (!isSilent && statusDiv) statusDiv.innerHTML = `Fetching ${acc.name} (${ticker})...`;
+
+                const data = await getExtendedPerformance(ticker);
+                
+                if (data && data.price > 0) {
+                    // --- THE SHOTGUN ASSIGNMENT ---
+                    // We save the data to every possible property name the renderer might look for
+                    acc.livePrice = data.price;
+                    acc.lastUpdated = data.ts;
+                    
+                    // 1. On the 'stats' object (Common)
                     acc.stats = {
-                        p1d: marketData.p1d,
-                        p1w: marketData.p1w,
-                        p1m: marketData.p1m,
-                        p3m: marketData.p3m,
-                        p6m: marketData.p6m,
-                        p1y: marketData.p1y,
-                        p5y: marketData.p5y,
-                        mtd: marketData.mtdRate,
-                        max: marketData.pMax
+                        p1d: data.p1d,
+                        p1w: data.p1w, p1m: data.p1m, p3m: data.p3m, 
+                        p6m: data.p6m, p1y: data.p1y, p5y: data.p5y,
+                        mtd: data.p1m
                     };
+                    
+                    // 2. Directly on the account object (Likely what your table wants)
+                    acc.p1d = data.p1d; 
+                    acc.dayChange = data.p1d;
+                    acc.changePct = data.p1d;
+                    acc.dailyChange = data.p1d;
 
-                    // F. Calculate New Balance
+                    // DEBUG: Log the first one to prove it's working
+                    if(acc === accounts[0]) {
+                        console.log(`[DEBUG] ${acc.ticker} 1D Calc: ${data.p1d * 100}%`);
+                    }
+
+                    // Update Balance Logic
+                    const lastMonth = acc.data[acc.data.length-1];
                     if (override && override.qty) {
-                        // PRECISE: Price * Quantity
-                        const newBalance = marketData.price * override.qty;
-                        liveEntry.balance = newBalance;
-                        // Gain = NewBalance - (Baseline + Deposits)
-                        liveEntry.marketGain = newBalance - (baselineEntry.balance + liveEntry.deposits + liveEntry.income);
+                        // Precise (Shares * Price)
+                        acc.value = data.price * override.qty;
                     } else {
-                        // ESTIMATED: Apply Monthly Growth Rate to Baseline
-                        // If we don't have shares, we assume the baseline balance grows by the ticker's MTD%
-                        const growthRate = marketData.mtdRate || 0; 
-                        const estimatedGain = baselineEntry.balance * growthRate;
-                        
-                        liveEntry.marketGain = estimatedGain;
-                        liveEntry.balance = baselineEntry.balance + estimatedGain + liveEntry.deposits + liveEntry.income;
+                        // Estimate (Baseline + Growth)
+                        const growth = data.p1m || 0; 
+                        if(lastMonth) acc.value = lastMonth.balance * (1 + growth);
                     }
                     
-                    liveEntry.cumulative = baselineEntry.cumulative + liveEntry.marketGain + liveEntry.income;
-
-                    // Calculate Day Change ($) for Header
-                    // CurrentValue - (CurrentValue / (1 + %Change))
-                    const val = liveEntry.balance;
-                    const changeAmt = val - (val / (1 + marketData.p1d));
-                    totalDayChange += changeAmt;
-
-                } else {
-                    liveEntry.isError = true;
+                    if(acc.value) {
+                         const gainAmt = acc.value - (acc.value / (1 + data.p1d));
+                         totalDayChange += gainAmt;
+                         runningTotal += acc.value;
+                    }
                 }
-
-                if (isNewRow) acc.data.push(liveEntry);
-                if (liveEntry.balance) runningTotal += liveEntry.balance;
             }
+
+            // 3. Update Net Worth Header
+            const nw = document.getElementById('stat-networth');
+            const dc = document.getElementById('stat-day-change');
             
-            // --- 4. Update Header Stats ---
-            const netWorthEl = document.getElementById('stat-networth');
-            const dailyChangeEl = document.getElementById('stat-day-change'); // Ensure this ID exists in your HTML
-            
-            if (netWorthEl) netWorthEl.innerText = fmtMoney(runningTotal);
-            
-            if (dailyChangeEl) {
-                 const sign = totalDayChange >= 0 ? '+' : '';
-                 const color = totalDayChange >= 0 ? 'var(--profit)' : 'var(--loss)';
-                 // Calculate total % change of the portfolio for the day
-                 const totalPct = runningTotal > 0 ? (totalDayChange / (runningTotal - totalDayChange)) * 100 : 0;
-                 
-                 dailyChangeEl.innerHTML = `<span style="color:${color}">${sign}${fmtMoney(totalDayChange)} (${sign}${totalPct.toFixed(2)}%)</span>`;
+            if(nw) nw.innerText = fmtMoney(runningTotal);
+            if(dc) {
+                const pct = runningTotal > 0 ? (totalDayChange / (runningTotal - totalDayChange)) * 100 : 0;
+                const color = totalDayChange >= 0 ? 'var(--profit)' : 'var(--loss)';
+                const sign = totalDayChange >= 0 ? '+' : '';
+                dc.innerHTML = `<span style="color:${color}">${sign}${fmtMoney(totalDayChange)} (${sign}${pct.toFixed(2)}%)</span>`;
             }
 
         } catch (e) {
-            console.error("Update Error", e);
+            console.error(e);
         } finally {
             isUpdating = false;
-            
-            // Reset UI
-            if(btn) btn.innerHTML = "<span>↻</span> Update";
-            if(headerStatus) {
-                const time = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-                headerStatus.innerHTML = `<span class='live-dot'></span> Live ${time}`;
-            }
-            if(!isSilent && statusDiv) {
-                 statusDiv.style.opacity = '0';
-                 setTimeout(() => { statusDiv.style.display = 'none'; }, 300);
+            if (btn) btn.innerHTML = "<span>↻</span> Update";
+            if (!isSilent && statusDiv) {
+                statusDiv.style.opacity = '0';
+                setTimeout(()=> statusDiv.style.display='none', 300);
             }
             
-            // TRIGGER FULL RENDER
-            // This ensures the table and charts redraw with the new data
-            if (typeof processAndRender === 'function') {
-                processAndRender(accounts, true); // true = preserve view
-            }
+            // CRITICAL: Re-render the table with the new data
+            if (typeof processAndRender === 'function') processAndRender(accounts, true);
         }
     }
     function renderWatchlistColumns() {
@@ -2813,6 +2709,7 @@
 </script>
 </body>
 </html>
+
 
 
 
