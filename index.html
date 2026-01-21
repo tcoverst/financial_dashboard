@@ -1145,140 +1145,166 @@
     // LOGIC: REAL-TIME MARKET DATA (UPDATED)
     // ==========================================
 
-/// ==========================================
-    // 1. ROBUST FETCH FUNCTION (Manual Calc Fix)
-    // ==========================================
-    // GLOBAL CIRCUIT BREAKER: Stops fetching if proxies are down to prevent freezing
-    // UPDATED: Uses Query1/Query2 rotation and removes dead proxies
-    // UPDATED: Uses Query1/Query2 rotation and removes dead proxies
-    // GLOBAL STATE: Tracks which proxies are "Dead" to avoid retrying them
-    // GLOBAL: Tracks proxies that are blocked or down so we don't retry them
-    // ==========================================
-    // BATCH DATA FETCHING (Fixes Rate Limits)
+// ==========================================
+    // CHUNKED BATCH FETCHING (Fixes Timeouts & Invalid Tickers)
     // ==========================================
     
-    // 1. Fetch Current Prices (Batch)
+    // Helper: Split array into smaller chunks
+    function chunkArray(myArray, chunk_size){
+        var results = [];
+        while (myArray.length) {
+            results.push(myArray.splice(0, chunk_size));
+        }
+        return results;
+    }
+
+    // 1. Fetch Current Prices (Chunked)
     async function fetchBatchQuotes(tickers) {
         if (!tickers || tickers.length === 0) return {};
-        const uniqueTickers = [...new Set(tickers)].filter(t => t && t !== 'Unknown' && t !== '-');
-        const symbolStr = uniqueTickers.join(',');
         
-        const cacheBuster = Math.floor(Date.now() / 60000); // 1-minute cache
-        const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${symbolStr}&_cb=${cacheBuster}`;
+        // FILTER: Remove invalid tickers like 'Cash' which break the API
+        const validTickers = [...new Set(tickers)].filter(t => 
+            t && t !== 'Unknown' && t !== '-' && t !== 'Cash' && t !== 'BOND'
+        );
         
-        // Proxy list for batch calls
+        // CHUNK: Split into groups of 5 to prevent Proxy Timeouts
+        // Copy array before chunking to avoid destroying original
+        const chunks = chunkArray([...validTickers], 5);
+        let combinedResults = {};
+
         const proxies = [
             'https://api.codetabs.com/v1/proxy?quest=',
             'https://api.allorigins.win/raw?url='
         ];
 
-        for (const proxy of proxies) {
-            try {
-                const res = await fetch(proxy + encodeURIComponent(url));
-                if (!res.ok) continue;
-                
-                const json = await res.json();
-                const data = json.contents ? JSON.parse(json.contents) : json; // Handle wrapper
-                
-                const map = {};
-                if (data.quoteResponse && data.quoteResponse.result) {
-                    data.quoteResponse.result.forEach(q => {
-                        map[q.symbol] = {
-                            price: q.regularMarketPrice,
-                            prevClose: q.regularMarketPreviousClose,
-                            p1d: (q.regularMarketPrice - q.regularMarketPreviousClose) / q.regularMarketPreviousClose,
-                            ts: Date.now()
-                        };
-                    });
-                    return map;
-                }
-            } catch (e) { console.warn("Batch Quote Failed on " + proxy); }
+        // Process each chunk
+        for (const chunk of chunks) {
+            const symbolStr = chunk.join(',');
+            const cacheBuster = Math.floor(Date.now() / 60000);
+            const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${symbolStr}&_cb=${cacheBuster}`;
+            
+            let chunkSuccess = false;
+
+            for (const proxy of proxies) {
+                if (chunkSuccess) break;
+                try {
+                    const res = await fetch(proxy + encodeURIComponent(url));
+                    if (!res.ok) continue;
+                    
+                    const json = await res.json();
+                    const data = json.contents ? JSON.parse(json.contents) : json;
+                    
+                    if (data.quoteResponse && data.quoteResponse.result) {
+                        data.quoteResponse.result.forEach(q => {
+                            combinedResults[q.symbol] = {
+                                price: q.regularMarketPrice,
+                                prevClose: q.regularMarketPreviousClose,
+                                p1d: (q.regularMarketPrice - q.regularMarketPreviousClose) / q.regularMarketPreviousClose,
+                                ts: Date.now()
+                            };
+                        });
+                        chunkSuccess = true;
+                    }
+                } catch (e) { console.warn(`Chunk Quote Failed on ${proxy}`); }
+            }
         }
-        return {};
+        return combinedResults;
     }
 
-    // 2. Fetch History/Sparklines (Batch) - Used for 1W, 1M, 1Y
+    // 2. Fetch History (Chunked)
     async function fetchBatchHistory(tickers) {
         if (!tickers || tickers.length === 0) return {};
-        const uniqueTickers = [...new Set(tickers)].filter(t => t && t !== 'Unknown' && t !== '-');
-        const symbolStr = uniqueTickers.join(',');
+
+        // FILTER
+        const validTickers = [...new Set(tickers)].filter(t => 
+            t && t !== 'Unknown' && t !== '-' && t !== 'Cash' && t !== 'BOND'
+        );
         
-        // Use 'spark' endpoint which supports multi-symbol history
-        const url = `https://query1.finance.yahoo.com/v7/finance/spark?symbols=${symbolStr}&range=5y&interval=1d`;
+        // CHUNK
+        const chunks = chunkArray([...validTickers], 5);
+        let combinedResults = {};
         
         const proxies = [
             'https://api.codetabs.com/v1/proxy?quest=',
             'https://api.allorigins.win/raw?url='
         ];
 
-        for (const proxy of proxies) {
-            try {
-                const res = await fetch(proxy + encodeURIComponent(url));
-                if (!res.ok) continue;
+        for (const chunk of chunks) {
+            const symbolStr = chunk.join(',');
+            // 'spark' endpoint is lighter than 'chart'
+            const url = `https://query1.finance.yahoo.com/v7/finance/spark?symbols=${symbolStr}&range=5y&interval=1d`;
+            
+            let chunkSuccess = false;
 
-                const json = await res.json();
-                const data = json.contents ? JSON.parse(json.contents) : json;
+            for (const proxy of proxies) {
+                if (chunkSuccess) break;
+                try {
+                    const res = await fetch(proxy + encodeURIComponent(url));
+                    if (!res.ok) continue;
 
-                const map = {};
-                if (data.spark && data.spark.result) {
-                    data.spark.result.forEach(item => {
-                        const symbol = item.symbol;
-                        const closes = item.response[0].indicators.quote[0].close;
-                        const timestamps = item.response[0].timestamp;
-                        
-                        // Clean nulls
-                        const cleanC = []; const cleanT = [];
-                        if (closes && timestamps) {
-                            closes.forEach((c, i) => { 
-                                if (c !== null && c !== undefined) { 
-                                    cleanC.push(c); 
-                                    cleanT.push(timestamps[i]); 
-                                }
-                            });
-                        }
+                    const json = await res.json();
+                    const data = json.contents ? JSON.parse(json.contents) : json;
 
-                        if (cleanC.length > 0) {
-                            const current = cleanC[cleanC.length - 1];
-                            const getAgo = (days) => {
-                                const target = cleanT[cleanT.length - 1] - (days * 86400);
-                                for (let i = cleanT.length - 1; i >= 0; i--) {
-                                    if (cleanT[i] <= target) return cleanC[i];
-                                }
-                                return cleanC[0];
-                            };
+                    if (data.spark && data.spark.result) {
+                        data.spark.result.forEach(item => {
+                            const symbol = item.symbol;
+                            const response = item.response[0];
+                            const closes = response.indicators.quote[0].close;
+                            const timestamps = response.timestamp;
+                            
+                            // Clean nulls
+                            const cleanC = []; const cleanT = [];
+                            if (closes && timestamps) {
+                                closes.forEach((c, i) => { 
+                                    if (c !== null && c !== undefined) { 
+                                        cleanC.push(c); 
+                                        cleanT.push(timestamps[i]); 
+                                    }
+                                });
+                            }
 
-                            map[symbol] = {
-                                p1w: (current - getAgo(7)) / getAgo(7),
-                                p1m: (current - getAgo(30)) / getAgo(30),
-                                p3m: (current - getAgo(90)) / getAgo(90),
-                                p6m: (current - getAgo(180)) / getAgo(180),
-                                p1y: (current - getAgo(365)) / getAgo(365),
-                                p5y: (current - getAgo(1825)) / getAgo(1825),
-                                pMax: (current - cleanC[0]) / cleanC[0]
-                            };
-                        }
-                    });
-                    return map;
-                }
-            } catch (e) { console.warn("Batch History Failed on " + proxy); }
+                            if (cleanC.length > 0) {
+                                const current = cleanC[cleanC.length - 1];
+                                const getAgo = (days) => {
+                                    const target = cleanT[cleanT.length - 1] - (days * 86400);
+                                    for (let i = cleanT.length - 1; i >= 0; i--) {
+                                        if (cleanT[i] <= target) return cleanC[i];
+                                    }
+                                    return cleanC[0];
+                                };
+
+                                combinedResults[symbol] = {
+                                    p1w: (current - getAgo(7)) / getAgo(7),
+                                    p1m: (current - getAgo(30)) / getAgo(30),
+                                    p3m: (current - getAgo(90)) / getAgo(90),
+                                    p6m: (current - getAgo(180)) / getAgo(180),
+                                    p1y: (current - getAgo(365)) / getAgo(365),
+                                    p5y: (current - getAgo(1825)) / getAgo(1825),
+                                    pMax: (current - cleanC[0]) / cleanC[0]
+                                };
+                            }
+                        });
+                        chunkSuccess = true;
+                    }
+                } catch (e) { console.warn(`Chunk History Failed on ${proxy}`); }
+            }
         }
-        return {};
+        return combinedResults;
     }
     // ==========================================
-    // MAIN UPDATE FUNCTION (Batch Implementation)
+    // MAIN UPDATE FUNCTION (Correctly handles Cash & Errors)
     // ==========================================
     async function updateWithLiveMarketData(accounts, isSilent = false) {
         if (isUpdating) return;
         isUpdating = true;
         
-        // UI FEEDBACK
         const headerStatus = document.getElementById('latest-date-display');
         const btn = document.getElementById('manual-refresh-btn');
         if(headerStatus) headerStatus.innerHTML = "<span class='live-dot' style='background:orange'></span> Updating...";
         if(btn) btn.innerHTML = "<i class='fas fa-sync fa-spin'></i>";
 
         try {
-            // 1. COLLECT TICKERS
+            // 1. PREPARE TICKERS
             const allTickers = new Set();
             
             // From Watchlist
@@ -1286,26 +1312,28 @@
                 userWatchlist.forEach(t => allTickers.add(t));
             }
             
-            // From Accounts
+            // From Accounts (With Mapping)
             accounts.forEach(acc => {
                 const override = accountOverrides[acc.id];
                 let ticker = override ? override.ticker : (acc.data[acc.data.length-1]?.invested);
                 
+                // --- CRITICAL MAPS ---
                 if (acc.id.toLowerCase().includes('fidelity')) ticker = 'GOOGL';
-                if (acc.id.toLowerCase().includes('cash')) ticker = 'BIL';
-                
+                if (acc.id.toLowerCase().includes('cash')) ticker = 'BIL'; // Map Cash to BIL
+                if (ticker === 'Cash') ticker = 'BIL'; 
+                if (ticker === 'BOND') ticker = 'BND';
+
                 if (ticker && ticker !== 'Unknown' && ticker !== '-') {
-                    // Map display names to real tickers if needed
                     const realTicker = TICKER_MAP[ticker] || ticker.split(' ')[0];
-                    acc._tempTicker = realTicker; // Store for later matching
+                    acc._tempTicker = realTicker; 
                     allTickers.add(realTicker);
                 }
             });
 
             const tickerArray = Array.from(allTickers);
-            console.log("Batch Fetching:", tickerArray);
+            console.log("Fetching Chunks:", tickerArray);
 
-            // 2. FETCH DATA (2 REQUESTS ONLY)
+            // 2. FETCH DATA (Chunked)
             const [quotes, history] = await Promise.all([
                 fetchBatchQuotes(tickerArray),
                 fetchBatchHistory(tickerArray)
@@ -1339,6 +1367,8 @@
 
             accounts.forEach(acc => {
                 const ticker = acc._tempTicker;
+                
+                // If no ticker (e.g. manual real estate), just add value
                 if (!ticker) {
                     if (acc.value) runningTotal += acc.value;
                     return;
@@ -1355,9 +1385,9 @@
                         p1d: q.p1d,
                         p1w: h.p1w, p1m: h.p1m, p3m: h.p3m,
                         p6m: h.p6m, p1y: h.p1y, p5y: h.p5y,
-                        mtd: h.p1m // Approx
+                        mtd: h.p1m 
                     };
-                    acc.p1d = q.p1d; // Crucial for snapshot
+                    acc.p1d = q.p1d;
                     acc.dayChange = q.p1d;
 
                     // Calc Value
@@ -1377,12 +1407,12 @@
                          runningTotal += acc.value;
                     }
                 } else {
-                    // Failover: Keep old value
+                    // Failover
                     if(acc.value) runningTotal += acc.value;
                 }
             });
 
-            // 5. UPDATE HEADERS
+            // 5. HEADERS
             const nw = document.getElementById('stat-networth');
             const dc = document.getElementById('stat-day-change');
             
@@ -2728,6 +2758,7 @@
 </script>
 </body>
 </html>
+
 
 
 
