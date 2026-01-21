@@ -1145,7 +1145,7 @@
     // LOGIC: REAL-TIME MARKET DATA (UPDATED)
     // ==========================================
 
-// UPDATED: Prioritizes corsproxy.io and adds "Human" delay
+// UPDATED: Robust Fetch with 5Y limit and "Human" delay
     async function getExtendedPerformance(ticker) {
         if (!ticker || ticker === 'Unknown' || ticker === '-') return null;
         const cleanTicker = TICKER_MAP[ticker] || ticker.split(' ')[0]; 
@@ -1154,18 +1154,18 @@
         const randomDelay = Math.floor(Math.random() * 1000) + 500;
         await new Promise(r => setTimeout(r, randomDelay));
 
-        // 2. PROXY LIST: Swapped order to use corsproxy.io first
         const proxies = [
             'https://corsproxy.io/?', 
             'https://api.allorigins.win/raw?url='
         ];
 
-        // Lighter URL (5y instead of Max)
+        // Lighter URL (5y instead of Max) to prevent timeouts
         const targetUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${cleanTicker}?range=5y&interval=1d`;
 
         for (const proxy of proxies) {
             try {
-                const response = await fetch(proxy + encodeURIComponent(targetUrl));
+                const fetchUrl = proxy + encodeURIComponent(targetUrl);
+                const response = await fetch(fetchUrl);
                 if (!response.ok) continue;
 
                 const text = await response.text();
@@ -1183,125 +1183,194 @@
                 const closes = result.indicators.quote[0].close || [];
                 
                 let currentPrice = meta.regularMarketPrice || closes[closes.length - 1];
-                
-                // --- Safe Return ---
-                // We return the data immediately if found.
-                // You can add the complex p1d/p1w/etc calculations here if needed, 
-                // but for now, let's just get the PRICE working to stop the hanging.
+                let prevClose = meta.previousClose || meta.chartPreviousClose;
+
+                // --- DATA CALCULATIONS ---
+                const getPriceAgo = (amt, mode) => {
+                    const d = new Date(result.timestamp[result.timestamp.length-1] * 1000);
+                    if(mode === 'days') d.setDate(d.getDate() - amt);
+                    if(mode === 'months') d.setMonth(d.getMonth() - amt);
+                    if(mode === 'years') d.setFullYear(d.getFullYear() - amt);
+                    const t = d.getTime() / 1000;
+                    for(let i=timestamps.length-1; i>=0; i--) {
+                        if(timestamps[i] <= t && closes[i]) return closes[i];
+                    }
+                    return closes[0];
+                };
+
                 return {
                     price: currentPrice,
-                    ts: Date.now() / 1000,
-                    // If you need the % changes, paste the calculation logic back here.
-                    // For debugging, we return 0s to ensure the UI loads.
-                    mtdRate: 0, p1d: 0, p1w: 0, p1m: 0, p3m: 0, p6m: 0, p1y: 0, p5y: 0, pMax: 0
+                    ts: result.timestamp[result.timestamp.length - 1],
+                    // Safely calculate 1D change
+                    p1d: (prevClose && currentPrice) ? (currentPrice - prevClose)/prevClose : 0,
+                    // Metrics
+                    p1w: (getPriceAgo(7,'days')) ? (currentPrice - getPriceAgo(7,'days'))/getPriceAgo(7,'days') : 0,
+                    p1m: (getPriceAgo(1,'months')) ? (currentPrice - getPriceAgo(1,'months'))/getPriceAgo(1,'months') : 0,
+                    p3m: (getPriceAgo(3,'months')) ? (currentPrice - getPriceAgo(3,'months'))/getPriceAgo(3,'months') : 0,
+                    p6m: (getPriceAgo(6,'months')) ? (currentPrice - getPriceAgo(6,'months'))/getPriceAgo(6,'months') : 0,
+                    p1y: (getPriceAgo(1,'years')) ? (currentPrice - getPriceAgo(1,'years'))/getPriceAgo(1,'years') : 0,
+                    p3y: (getPriceAgo(3,'years')) ? (currentPrice - getPriceAgo(3,'years'))/getPriceAgo(3,'years') : 0,
+                    p5y: (getPriceAgo(5,'years')) ? (currentPrice - getPriceAgo(5,'years'))/getPriceAgo(5,'years') : 0,
+                    pMax: (closes[0]) ? (currentPrice - closes[0])/closes[0] : 0,
+                    mtdRate: 0 // Simplified for stability
                 };
 
             } catch (e) { console.warn(`Failed ${cleanTicker} on ${proxy}`); }
         }
 
-        // 3. FAIL SAFE: Return dummy data so the dashboard LOADS instead of hanging
+        // FAIL SAFE: Return dummy data so the dashboard DOES NOT HANG
         return {
             price: 0, 
             ts: Date.now(),
-            mtdRate: 0, p1d: 0, p1w: 0, p1m: 0, p3m: 0, p6m: 0, p1y: 0, p5y: 0, pMax: 0
+            p1d: 0, p1w: 0, p1m: 0, p3m: 0, p6m: 0, p1y: 0, p5y: 0, pMax: 0
         };
     }
 
-    // COMPLETED FUNCTION: Sequentially fetches data and updates the UI row-by-row
-    async function updateWithLiveMarketData() {
-        const statusEl = document.getElementById('marketStatus');
-        const netWorthEl = document.getElementById('liveNetWorth'); 
-        const dailyChangeEl = document.getElementById('liveDailyChange');
+    // COMPLETED FUNCTION: Fixes "accounts undefined" error and runs sequentially
+    async function updateWithLiveMarketData(accounts, isSilent = false) {
+        if (isUpdating) return;
+        isUpdating = true;
         
-        if (statusEl) {
-            statusEl.innerHTML = '<i class="fas fa-sync fa-spin"></i> Initializing Market Data...';
-            statusEl.className = 'status-tag pending';
+        const statusDiv = document.getElementById('loading');
+        const headerStatus = document.getElementById('latest-date-display');
+        const btn = document.getElementById('manual-refresh-btn');
+        const netWorthEl = document.getElementById('stat-networth');
+        
+        if (!isSilent) {
+            statusDiv.style.opacity = '1';
+            statusDiv.style.display = 'flex';
+            statusDiv.innerHTML = "Fetching Real-Time Market Data...<br><span style='font-size:0.8em; font-weight:normal'>Updating One-by-One to prevent errors...</span>";
+        } else {
+            headerStatus.innerHTML = "<span class='live-dot'></span> Updating...";
+            if(btn) btn.innerHTML = "<span>↻</span> ...";
         }
-
-        console.log("Starting Sequential Market Update...");
-
-        let totalLiveValue = 0;
-        let totalDayChangeAmt = 0;
-        let tickersFetched = 0;
-
-        // 1. Loop through accounts ONE BY ONE (Sequential)
-        for (const acc of accounts) {
-            // Skip accounts with no ticker or manual cash accounts that shouldn't update
-            if (!acc.ticker || acc.ticker === 'Unknown' || acc.ticker === '-') {
-                totalLiveValue += (acc.value || 0); // Keep original value
-                continue;
+        
+        const now = new Date();
+        const currentYear = now.getFullYear();
+        const currentMonthVal = now.getMonth() + 1; 
+        const currentMonthKey = `${currentYear}-${String(currentMonthVal).padStart(2, '0')}`;
+        
+        try {
+            // --- 1. WATCHLIST SEQUENTIAL UPDATE ---
+            watchlistDataStore = [];
+            for (const ticker of userWatchlist) {
+                 const data = await getExtendedPerformance(ticker);
+                 if(data && data.price > 0) {
+                     watchlistDataStore.push({
+                         ticker: ticker,
+                         price: data.price,
+                         dayChange: data.p1d,
+                         p1w: data.p1w, p1m: data.p1m, p3m: data.p3m, 
+                         p6m: data.p6m, p1y: data.p1y, p3y: data.p3y, 
+                         p5y: data.p5y, pMax: data.pMax
+                     });
+                 }
             }
+            renderWatchlistColumns();
 
-            // Update Status Indicator
-            if (statusEl) statusEl.innerHTML = `<i class="fas fa-sync fa-spin"></i> Fetching ${acc.ticker}...`;
-
-            // 2. Fetch Data (This waits for the delay in getExtendedPerformance)
-            const marketData = await getExtendedPerformance(acc.ticker);
-
-            if (marketData && marketData.price) {
-                // UPDATE ACCOUNT DATA
-                acc.livePrice = marketData.price;
-                acc.lastUpdated = marketData.ts;
+            // --- 2. ACCOUNTS SEQUENTIAL UPDATE ---
+            // Use 'for...of' loop to wait for each request (prevents 429 errors)
+            let runningTotal = 0;
+            
+            for (const acc of accounts) {
+                if (acc.data.length === 0) continue;
                 
-                // If we have shares, calculate the new total value
-                if (acc.shares) {
-                    acc.value = acc.shares * acc.livePrice; // Overwrite current value with live value
+                // SETUP: Get Baseline (Last Month)
+                const startOfThisMonth = new Date(currentYear, currentMonthVal - 1, 1);
+                let baselineEntry = null;
+                for (let i = acc.data.length - 1; i >= 0; i--) {
+                    if (acc.data[i].dateObj < startOfThisMonth) {
+                        baselineEntry = acc.data[i];
+                        break;
+                    }
+                }
+                if (!baselineEntry) continue;
+
+                // SETUP: Get or Create Live Entry
+                let liveEntry = acc.data.find(d => d.key === currentMonthKey);
+                let isNewRow = false;
+
+                if (!liveEntry) {
+                    isNewRow = true;
+                    liveEntry = {
+                        key: currentMonthKey,
+                        dateObj: startOfThisMonth,
+                        deposits: 0, income: 0, marketGain: 0,
+                        cumulative: baselineEntry.cumulative,
+                        balance: baselineEntry.balance,
+                        invested: baselineEntry.invested,
+                        rawWithdrawals: 0, isLive: true, isError: false, timestamp: 0 
+                    };
                 }
 
-                // Store performance stats for the UI
-                acc.stats = {
-                    p1d: marketData.p1d,
-                    p1w: marketData.p1w,
-                    p1m: marketData.p1m,
-                    p3m: marketData.p3m,
-                    p6m: marketData.p6m,
-                    p1y: marketData.p1y,
-                    p5y: marketData.p5y,
-                    mtd: marketData.mtdRate,
-                    max: marketData.pMax
-                };
+                // DETERMINE TICKER
+                const override = accountOverrides[acc.id];
+                let ticker = override ? override.ticker : liveEntry.invested;
+                if(!ticker || ticker === '-') {
+                    if (acc.id.includes('fidelity')) ticker = 'GOOGL';
+                    if (acc.id.includes('boeing')) ticker = 'BND';
+                    if (acc.id.includes('wells')) ticker = 'BIL';
+                }
 
-                // Calculate Day Change ($) for this account
-                const dayChange = acc.value * marketData.p1d;
-                totalDayChangeAmt += dayChange;
+                // UPDATE STATUS UI
+                if(!isSilent) statusDiv.innerHTML = `Fetching Real-Time Market Data...<br><span style='font-size:0.8em'>Updating ${acc.name} (${ticker})...</span>`;
+                else headerStatus.innerHTML = `<span class='live-dot'></span> ${acc.name}...`;
+
+                // FETCH DATA (Waits for delay)
+                const marketData = await getExtendedPerformance(ticker);
                 
-                tickersFetched++;
-                console.log(`Updated ${acc.ticker}: $${acc.livePrice.toFixed(2)}`);
-            } 
+                if (marketData && marketData.price > 0) {
+                    liveEntry.isError = false;
+                    liveEntry.timestamp = marketData.ts;
+                    
+                    // Logic: Balance = Price * Shares
+                    // Since we don't track shares explicitly in sheet, we derive them from baseline
+                    // OR we just apply the % growth to the baseline balance
+                    
+                    if (override && override.qty) {
+                        // Exact Calc if user provided qty
+                        liveEntry.balance = marketData.price * override.qty;
+                        liveEntry.marketGain = liveEntry.balance - liveEntry.deposits - liveEntry.income - baselineEntry.balance;
+                        liveEntry.cumulative = baselineEntry.cumulative + liveEntry.marketGain + liveEntry.income;
+                    } else {
+                        // Approx Calc based on monthly growth
+                        // We use p1m (Month change) or mtd logic
+                        // Fallback: If MTD is 0, we can use (CurrentPrice - MonthStartPrice)/MonthStartPrice
+                        // But for stability, let's use the raw price difference if we knew the start price
+                        
+                        // SIMPLEST RELIABLE METHOD:
+                        // Assume baseline balance bought 'X' shares at month start price.
+                        // New Balance = X * Current Price.
+                        // We lack "Month Start Price" exactly, but we can approximate using p1m
+                        
+                        // Let's use the % change from 1 Month ago (p1m) as a proxy for MTD if MTD is 0
+                        const growthRate = marketData.p1m || 0; 
+                        const estimatedGain = baselineEntry.balance * growthRate;
+                        
+                        liveEntry.marketGain = estimatedGain;
+                        liveEntry.balance = baselineEntry.balance + estimatedGain + liveEntry.deposits + liveEntry.income;
+                        liveEntry.cumulative = baselineEntry.cumulative + estimatedGain + liveEntry.income;
+                    }
 
-            // Add to running total
-            totalLiveValue += acc.value;
+                } else {
+                    liveEntry.isError = true;
+                }
 
-            // 3. OPTIONAL: Update the Header Display immediately (Visual Feedback)
-            if (netWorthEl) netWorthEl.innerText = fmtMoney(totalLiveValue);
-        }
+                if (isNewRow) acc.data.push(liveEntry);
+                
+                // Add to running total for cool visual effect
+                if (liveEntry.balance) runningTotal += liveEntry.balance;
+            }
 
-        // 4. Final Wrap-up
-        const timestamp = new Date().toLocaleTimeString();
-        if (statusEl) {
-            statusEl.innerHTML = `<i class="fas fa-check-circle"></i> Live: ${timestamp}`;
-            statusEl.className = 'status-tag success';
-        }
-
-        // Update the Daily Change Header
-        if (dailyChangeEl) {
-            const pct = totalLiveValue > 0 ? (totalDayChangeAmt / totalLiveValue) * 100 : 0;
-            const sign = totalDayChangeAmt >= 0 ? '+' : '';
-            const colorClass = totalDayChangeAmt >= 0 ? 'text-green' : 'text-red';
-            
-            dailyChangeEl.innerHTML = `<span class="${colorClass}" style="font-weight:bold">
-                ${sign}${fmtMoney(totalDayChangeAmt)} (${sign}${pct.toFixed(2)}%)
-            </span>`;
-        }
-
-        console.log("Market Update Complete.");
-        
-        // 5. Trigger a full dashboard re-render to update charts and tables with new values
-        // Assuming you have a main render function. If not, this part can be removed.
-        if (typeof renderDashboard === 'function') {
-            renderDashboard();
-        } else if (typeof updateUI === 'function') {
-            updateUI();
+        } catch (e) {
+            console.error("Update Error", e);
+        } finally {
+            isUpdating = false;
+            if(btn) btn.innerHTML = "<span>↻</span> Update";
+            if(!isSilent) {
+                 statusDiv.style.opacity = '0';
+                 setTimeout(() => { statusDiv.style.display = 'none'; }, 300);
+            }
         }
     }
     
@@ -2614,6 +2683,7 @@
 </script>
 </body>
 </html>
+
 
 
 
