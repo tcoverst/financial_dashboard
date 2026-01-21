@@ -1145,8 +1145,7 @@
     // LOGIC: REAL-TIME MARKET DATA (UPDATED)
     // ==========================================
 
-/// UPDATED: Hybrid Strategy (Quote for Accuracy + Chart for History)
-    // Fixes 0% 1D change and 1200% 5Y anomalies
+// UPDATED: Manually calculates 1D change to prevent "0.00%" error
     async function getExtendedPerformance(ticker) {
         if (!ticker || ticker === 'Unknown' || ticker === '-') return null;
         const cleanTicker = TICKER_MAP[ticker] || ticker.split(' ')[0]; 
@@ -1174,15 +1173,13 @@
         ];
 
         // 1. URLs
-        // QUOTE: The source of truth for Price and 1D Change
         const quoteUrl = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${cleanTicker}`;
-        // CHART: The source for 1W/1M/1Y history (Limited to 5y to prevent bugs)
         const chartUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${cleanTicker}?range=5y&interval=1d`;
 
         let quoteData = null;
         let chartData = null;
 
-        // 2. FETCH QUOTE (Critical for 1D accuracy)
+        // 2. FETCH QUOTE (Source of Truth for Price)
         for (const proxy of proxies) {
             try {
                 const response = await fetchWithTimeout(proxy + encodeURIComponent(quoteUrl));
@@ -1199,7 +1196,7 @@
             } catch (e) { console.warn(`Quote fail ${cleanTicker}`); }
         }
 
-        // 3. FETCH CHART (For history)
+        // 3. FETCH CHART (Source of Truth for History)
         for (const proxy of proxies) {
             try {
                 const response = await fetchWithTimeout(proxy + encodeURIComponent(chartUrl));
@@ -1216,24 +1213,37 @@
             } catch (e) { console.warn(`Chart fail ${cleanTicker}`); }
         }
 
-        // 4. COMBINE & RETURN
-        // If we have no data at all, return null
+        // 4. COMBINE & CALCULATE
         if (!quoteData && !chartData) return null;
 
-        // PREFER Quote Data for Price/1D, fallback to Chart if needed
+        // A. DETERMINE PRICE
         const currentPrice = quoteData ? quoteData.regularMarketPrice : (chartData ? chartData.meta.regularMarketPrice : 0);
         
-        // CRITICAL FIX: Direct read of the percent change
-        const dayChangePct = quoteData ? (quoteData.regularMarketChangePercent / 100) : 0; 
+        // B. DETERMINE PREVIOUS CLOSE (Essential for 1D Change)
+        // We prioritize the Quote API's 'regularMarketPreviousClose'
+        let prevClose = quoteData ? quoteData.regularMarketPreviousClose : 0;
+        
+        // Fallback to Chart meta if Quote is missing it
+        if (!prevClose && chartData && chartData.meta) {
+            prevClose = chartData.meta.chartPreviousClose || chartData.meta.previousClose;
+        }
 
-        // CALCULATE HISTORY (Using Chart Data)
+        // C. MANUAL CALCULATION (Fixes the 0.00% bug)
+        // If we have both numbers, we calculate it ourselves. This cannot return 0 unless price hasn't moved.
+        let dayChangePct = 0;
+        if (currentPrice && prevClose) {
+            dayChangePct = (currentPrice - prevClose) / prevClose;
+        } else if (quoteData && quoteData.regularMarketChangePercent) {
+             // Backup: Use API field if we couldn't find prevClose (divided by 100 just in case)
+             dayChangePct = quoteData.regularMarketChangePercent / 100;
+        }
+
+        // D. HISTORY CALCS (Chart Data)
         let p1w=0, p1m=0, p3m=0, p6m=0, p1y=0, p5y=0, pMax=0;
         
         if (chartData && chartData.timestamp && chartData.indicators.quote[0].close) {
             const timestamps = chartData.timestamp;
             const closes = chartData.indicators.quote[0].close;
-            
-            // Clean arrays (remove nulls)
             const cleanT = [];
             const cleanC = [];
             closes.forEach((c, i) => {
@@ -1251,15 +1261,13 @@
                     if(mode === 'm') d.setMonth(d.getMonth() - amt);
                     if(mode === 'y') d.setFullYear(d.getFullYear() - amt);
                     const t = d.getTime() / 1000;
-                    
                     for(let i=cleanT.length-1; i>=0; i--) {
                         if(cleanT[i] <= t) return cleanC[i];
                     }
                     return cleanC[0];
                 };
 
-                // Use the reliable Current Price for calculations
-                const base = currentPrice;
+                const base = currentPrice; 
                 const p1wVal = getPriceAgo(7, 'd');
                 const p1mVal = getPriceAgo(1, 'm');
                 const p3mVal = getPriceAgo(3, 'm');
@@ -1281,16 +1289,16 @@
         return {
             price: currentPrice,
             ts: Date.now() / 1000,
-            p1d: dayChangePct, // Now explicitly accurate from Quote API
+            p1d: dayChangePct, // Now manually calculated
             p1w: p1w,
             p1m: p1m,
             p3m: p3m,
             p6m: p6m,
             p1y: p1y,
-            p3y: 0, 
+            p3y: 0,
             p5y: p5y,
             pMax: pMax,
-            mtdRate: p1m // Approx for MTD
+            mtdRate: p1m 
         };
     }
     // COMPLETED FUNCTION: Sequentially updates Watchlist AND Accounts
@@ -2805,6 +2813,7 @@
 </script>
 </body>
 </html>
+
 
 
 
