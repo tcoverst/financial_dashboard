@@ -1145,13 +1145,27 @@
     // LOGIC: REAL-TIME MARKET DATA (UPDATED)
     // ==========================================
 
-// UPDATED: Robust Fetch with 5Y limit and "Human" delay
+// UPDATED: Fixes "Hanging" and "1200% Gain" bugs
     async function getExtendedPerformance(ticker) {
         if (!ticker || ticker === 'Unknown' || ticker === '-') return null;
         const cleanTicker = TICKER_MAP[ticker] || ticker.split(' ')[0]; 
 
-        // 1. ADD DELAY: Random pause (0.5s - 1.5s) to avoid rate limits
-        const randomDelay = Math.floor(Math.random() * 1000) + 500;
+        // 1. TIMEOUT HELPER (Prevents the "Stuck at 0s" bug)
+        const fetchWithTimeout = async (url, timeout = 4000) => {
+            const controller = new AbortController();
+            const id = setTimeout(() => controller.abort(), timeout);
+            try {
+                const response = await fetch(url, { signal: controller.signal });
+                clearTimeout(id);
+                return response;
+            } catch (err) {
+                clearTimeout(id);
+                throw err;
+            }
+        };
+
+        // 2. DELAY: Random pause to look like a human
+        const randomDelay = Math.floor(Math.random() * 500) + 200;
         await new Promise(r => setTimeout(r, randomDelay));
 
         const proxies = [
@@ -1159,13 +1173,13 @@
             'https://api.allorigins.win/raw?url='
         ];
 
-        // Lighter URL (5y instead of Max) to prevent timeouts
+        // 3. FIX DATA: Use '5y' instead of 'max' to prevent split-adjustment bugs
         const targetUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${cleanTicker}?range=5y&interval=1d`;
 
         for (const proxy of proxies) {
             try {
                 const fetchUrl = proxy + encodeURIComponent(targetUrl);
-                const response = await fetch(fetchUrl);
+                const response = await fetchWithTimeout(fetchUrl); // Uses timeout
                 if (!response.ok) continue;
 
                 const text = await response.text();
@@ -1182,26 +1196,40 @@
                 const timestamps = result.timestamp || [];
                 const closes = result.indicators.quote[0].close || [];
                 
-                let currentPrice = meta.regularMarketPrice || closes[closes.length - 1];
-                let prevClose = meta.previousClose || meta.chartPreviousClose;
+                // DATA CLEANING: Remove nulls
+                const cleanCloses = [];
+                const cleanTimestamps = [];
+                closes.forEach((c, i) => {
+                    if (c !== null && c !== undefined) {
+                        cleanCloses.push(c);
+                        cleanTimestamps.push(timestamps[i]);
+                    }
+                });
+
+                if (cleanCloses.length === 0) continue;
+
+                let currentPrice = meta.regularMarketPrice || cleanCloses[cleanCloses.length - 1];
+                let prevClose = meta.previousClose || meta.chartPreviousClose || cleanCloses[cleanCloses.length - 2];
 
                 // --- DATA CALCULATIONS ---
                 const getPriceAgo = (amt, mode) => {
-                    const d = new Date(result.timestamp[result.timestamp.length-1] * 1000);
+                    const d = new Date(cleanTimestamps[cleanTimestamps.length-1] * 1000);
                     if(mode === 'days') d.setDate(d.getDate() - amt);
                     if(mode === 'months') d.setMonth(d.getMonth() - amt);
                     if(mode === 'years') d.setFullYear(d.getFullYear() - amt);
                     const t = d.getTime() / 1000;
-                    for(let i=timestamps.length-1; i>=0; i--) {
-                        if(timestamps[i] <= t && closes[i]) return closes[i];
+                    
+                    // Find closest timestamp
+                    for(let i=cleanTimestamps.length-1; i>=0; i--) {
+                        if(cleanTimestamps[i] <= t) return cleanCloses[i];
                     }
-                    return closes[0];
+                    return cleanCloses[0];
                 };
 
                 return {
                     price: currentPrice,
-                    ts: result.timestamp[result.timestamp.length - 1],
-                    // Safely calculate 1D change
+                    ts: cleanTimestamps[cleanTimestamps.length - 1],
+                    // Safely calculate 1D change using META data first
                     p1d: (prevClose && currentPrice) ? (currentPrice - prevClose)/prevClose : 0,
                     // Metrics
                     p1w: (getPriceAgo(7,'days')) ? (currentPrice - getPriceAgo(7,'days'))/getPriceAgo(7,'days') : 0,
@@ -1211,8 +1239,8 @@
                     p1y: (getPriceAgo(1,'years')) ? (currentPrice - getPriceAgo(1,'years'))/getPriceAgo(1,'years') : 0,
                     p3y: (getPriceAgo(3,'years')) ? (currentPrice - getPriceAgo(3,'years'))/getPriceAgo(3,'years') : 0,
                     p5y: (getPriceAgo(5,'years')) ? (currentPrice - getPriceAgo(5,'years'))/getPriceAgo(5,'years') : 0,
-                    pMax: (closes[0]) ? (currentPrice - closes[0])/closes[0] : 0,
-                    mtdRate: 0 // Simplified for stability
+                    pMax: 0, // Max is unreliable on 5y range, set to 0 to avoid bugs
+                    mtdRate: 0 
                 };
 
             } catch (e) { console.warn(`Failed ${cleanTicker} on ${proxy}`); }
@@ -1225,7 +1253,6 @@
             p1d: 0, p1w: 0, p1m: 0, p3m: 0, p6m: 0, p1y: 0, p5y: 0, pMax: 0
         };
     }
-
     // COMPLETED FUNCTION: Fixes "accounts undefined" error and runs sequentially
     async function updateWithLiveMarketData(accounts, isSilent = false) {
         if (isUpdating) return;
@@ -2021,13 +2048,18 @@
             
             if (refreshTimer <= 0) {
                 console.log("Auto-Refreshing Market Data...");
+                
+                // FORCE RESET: Ensure we never get stuck in "isUpdating" mode
+                isUpdating = false; 
+                
                 updateWithLiveMarketData(globalAccountsData, true); 
                 processAndRender(globalAccountsData, true); 
                 
                 refreshTimer = isMarket ? 10 : 60;
             }
             
-            document.getElementById('refresh-timer').innerText = `Updates in ${refreshTimer}s`;
+            const timerEl = document.getElementById('refresh-timer');
+            if(timerEl) timerEl.innerText = `Updates in ${refreshTimer}s`;
         }, 1000);
     }
 
@@ -2683,6 +2715,7 @@
 </script>
 </body>
 </html>
+
 
 
 
