@@ -1145,30 +1145,46 @@
     // LOGIC: REAL-TIME MARKET DATA (UPDATED)
     // ==========================================
 
-    // UPDATED FUNCTION: Uses META data for accurate Live & Day Change prices
+    // UPDATED FUNCTION: More robust proxy handling and validation
     async function getExtendedPerformance(ticker) {
         if (!ticker || ticker === 'Unknown' || ticker === '-') return null;
         const cleanTicker = TICKER_MAP[ticker] || ticker.split(' ')[0]; 
 
+        // UPDATED PROXY LIST: Prioritizing 'raw' output for better stability
         const proxies = [
-            'https://corsproxy.io/?',
-            'https://api.allorigins.win/get?url=',
-            'https://thingproxy.freeboard.io/fetch/' 
+            'https://api.allorigins.win/raw?url=', // Generally most reliable
+            'https://corsproxy.io/?',              // Backup
+            'https://thingproxy.freeboard.io/fetch/' // Last resort
         ];
 
         const cacheBuster = `&_=${new Date().getTime()}`;
-        
-        // Use range=max to get long history for 1Y/3Y/5Y calculations
         const targetUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${cleanTicker}?range=max&interval=1d${cacheBuster}`;
 
         for (const proxy of proxies) {
             try {
-                let fetchUrl = proxy.includes('allorigins') ? proxy + encodeURIComponent(targetUrl) : proxy + targetUrl;
-                const response = await fetch(fetchUrl);
-                if (!response.ok) throw new Error('Network');
+                // Construct the correct URL based on the proxy type
+                const fetchUrl = proxy + encodeURIComponent(targetUrl);
                 
-                let data = proxy.includes('allorigins') ? JSON.parse((await response.json()).contents) : await response.json();
+                const response = await fetch(fetchUrl);
+                if (!response.ok) throw new Error('Network response was not ok');
+                
+                // DATA PARSING: Handle different proxy return types
+                let data;
+                const text = await response.text();
+                
+                try {
+                    data = JSON.parse(text);
+                } catch (e) {
+                    // If JSON parse fails, the proxy returned an HTML error page (common with 429s)
+                    continue; // Try next proxy
+                }
 
+                // Handle 'allorigins' non-raw wrapper if it fell back to that
+                if (data.contents) {
+                    try { data = JSON.parse(data.contents); } catch(e) { continue; }
+                }
+
+                // VALIDATION: Ensure we actually have Yahoo chart data
                 if (!data.chart || !data.chart.result || data.chart.result.length === 0) continue;
 
                 const quote = data.chart.result[0];
@@ -1178,35 +1194,30 @@
 
                 if (!closes || closes.length === 0) continue;
 
-                // --- KEY FIX FOR LIVE PRICE & DAY CHANGE ---
-                // We prioritize META data which comes from the dashboard header
-                // regularMarketPrice = Current Live Price (or Closing Price if market closed)
-                // chartPreviousClose = Official Close of previous session
-                
+                // --- DATA EXTRACTION (Logic unchanged) ---
                 let currentPrice = meta.regularMarketPrice;
                 let prevClose = meta.previousClose;
                 
-                // --- HISTORY LOGIC ---
-                // We still need the array for finding Last Week, Last Month, etc.
                 let lastIndex = -1;
                 for (let i = closes.length - 1; i >= 0; i--) {
                     if (closes[i] !== null) { 
-                        if(!currentPrice) currentPrice = closes[i]; // Fallback
+                        if(!currentPrice) currentPrice = closes[i]; 
                         lastIndex = i;
                         break; 
                     }
                 }
+                
+                if (lastIndex === -1) continue; // No valid closes found
+
                 const lastTimestamp = timestamps[lastIndex];
                 const lastDate = new Date(lastTimestamp * 1000);
                 
-                // Fallback for prevClose if meta is missing or unreliable
                 if (!prevClose) {
                      for (let j = lastIndex - 1; j >= 0; j--) {
                          if (closes[j] !== null) { prevClose = closes[j]; break; }
                      }
                 }
 
-                // Helper to find price N days/months ago
                 const getPriceAgo = (amt, mode) => {
                     const targetDate = new Date(lastDate);
                     if (mode === 'days') targetDate.setDate(targetDate.getDate() - amt);
@@ -1218,10 +1229,9 @@
                             return closes[i];
                         }
                     }
-                    return closes.find(c => c !== null); // fallback to earliest
+                    return closes.find(c => c !== null); 
                 };
 
-                // Calculate Month To Date Baseline (For Account Value)
                 const now = new Date();
                 const startOfCurrentMonth = new Date(now.getFullYear(), now.getMonth(), 1);
                 let mtdBaseline = null;
@@ -1235,11 +1245,7 @@
                     price: currentPrice,
                     ts: lastTimestamp,
                     mtdRate: (mtdBaseline && currentPrice) ? (currentPrice - mtdBaseline) / mtdBaseline : 0,
-                    
-                    // METRICS
-                    // 1D: Explicitly uses (Live - Official Prev Close) / Official Prev Close
                     p1d: (prevClose && currentPrice) ? (currentPrice - prevClose) / prevClose : 0,
-                    
                     p1w: (getPriceAgo(7, 'days') && currentPrice) ? (currentPrice - getPriceAgo(7, 'days')) / getPriceAgo(7, 'days') : 0,
                     p1m: (getPriceAgo(1, 'months') && currentPrice) ? (currentPrice - getPriceAgo(1, 'months')) / getPriceAgo(1, 'months') : 0,
                     p3m: (getPriceAgo(3, 'months') && currentPrice) ? (currentPrice - getPriceAgo(3, 'months')) / getPriceAgo(3, 'months') : 0,
@@ -1251,10 +1257,11 @@
                 };
 
             } catch (e) {
-                console.warn(`Proxy failed for ${cleanTicker}`);
+                console.warn(`Proxy ${proxy} failed for ${cleanTicker}:`, e);
+                // Loop continues to next proxy
             }
         }
-        return null; 
+        return null; // All proxies failed
     }
 
     async function updateWithLiveMarketData(accounts, isSilent = false) {
@@ -2697,3 +2704,4 @@
 </script>
 </body>
 </html>
+
