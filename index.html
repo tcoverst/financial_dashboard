@@ -1145,308 +1145,248 @@
     // LOGIC: REAL-TIME MARKET DATA (UPDATED)
     // ==========================================
 
-// ==========================================
-    // BATCH DATA FETCHING (Chunked & filtered)
-    // ==========================================
-    
-    // Helper: Split array into smaller chunks
-    function chunkArray(myArray, chunk_size){
-        var results = [];
-        var copy = [...myArray]; // Create copy to avoid modifying original
-        while (copy.length) {
-            results.push(copy.splice(0, chunk_size));
-        }
-        return results;
-    }
-
-    // 1. Fetch Current Prices (Batch)
-    async function fetchBatchQuotes(tickers) {
-        if (!tickers || tickers.length === 0) return {};
-        
-        // CHUNK: Small size (4) to prevent Timeouts/Blocking
-        const chunks = chunkArray(tickers, 4);
-        let combinedResults = {};
+    // UPDATED FUNCTION: Uses META data for accurate Live & Day Change prices
+    async function getExtendedPerformance(ticker) {
+        if (!ticker || ticker === 'Unknown' || ticker === '-') return null;
+        const cleanTicker = TICKER_MAP[ticker] || ticker.split(' ')[0]; 
 
         const proxies = [
-            'https://api.codetabs.com/v1/proxy?quest=',
-            'https://api.allorigins.win/raw?url='
+            'https://corsproxy.io/?',
+            'https://api.allorigins.win/get?url=',
+            'https://thingproxy.freeboard.io/fetch/' 
         ];
 
-        for (const chunk of chunks) {
-            // Remove any lingering invalid symbols just in case
-            const validSymbols = chunk.filter(t => t && t !== 'Cash'); 
-            if(validSymbols.length === 0) continue;
+        const cacheBuster = `&_=${new Date().getTime()}`;
+        
+        // Use range=max to get long history for 1Y/3Y/5Y calculations
+        const targetUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${cleanTicker}?range=max&interval=1d${cacheBuster}`;
 
-            const symbolStr = validSymbols.join(',');
-            const cacheBuster = Math.floor(Date.now() / 60000); // 1-min cache
-            const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${symbolStr}&_cb=${cacheBuster}`;
-            
-            let chunkSuccess = false;
+        for (const proxy of proxies) {
+            try {
+                let fetchUrl = proxy.includes('allorigins') ? proxy + encodeURIComponent(targetUrl) : proxy + targetUrl;
+                const response = await fetch(fetchUrl);
+                if (!response.ok) throw new Error('Network');
+                
+                let data = proxy.includes('allorigins') ? JSON.parse((await response.json()).contents) : await response.json();
 
-            for (const proxy of proxies) {
-                if (chunkSuccess) break; // Skip other proxies if we got data
-                try {
-                    const res = await fetch(proxy + encodeURIComponent(url));
-                    if (!res.ok) continue;
-                    
-                    const json = await res.json();
-                    const data = json.contents ? JSON.parse(json.contents) : json; // Handle AllOrigins wrapper
-                    
-                    if (data.quoteResponse && data.quoteResponse.result) {
-                        data.quoteResponse.result.forEach(q => {
-                            combinedResults[q.symbol] = {
-                                price: q.regularMarketPrice,
-                                prevClose: q.regularMarketPreviousClose,
-                                p1d: (q.regularMarketPrice - q.regularMarketPreviousClose) / q.regularMarketPreviousClose,
-                                ts: Date.now()
-                            };
-                        });
-                        chunkSuccess = true;
+                if (!data.chart || !data.chart.result || data.chart.result.length === 0) continue;
+
+                const quote = data.chart.result[0];
+                const meta = quote.meta;
+                const timestamps = quote.timestamp;
+                const closes = quote.indicators.quote[0].close;
+
+                if (!closes || closes.length === 0) continue;
+
+                // --- KEY FIX FOR LIVE PRICE & DAY CHANGE ---
+                // We prioritize META data which comes from the dashboard header
+                // regularMarketPrice = Current Live Price (or Closing Price if market closed)
+                // chartPreviousClose = Official Close of previous session
+                
+                let currentPrice = meta.regularMarketPrice;
+                let prevClose = meta.previousClose;
+                
+                // --- HISTORY LOGIC ---
+                // We still need the array for finding Last Week, Last Month, etc.
+                let lastIndex = -1;
+                for (let i = closes.length - 1; i >= 0; i--) {
+                    if (closes[i] !== null) { 
+                        if(!currentPrice) currentPrice = closes[i]; // Fallback
+                        lastIndex = i;
+                        break; 
                     }
-                } catch (e) { 
-                    // Silent fail for this proxy, try next
                 }
-            }
-            // Small delay between chunks to be polite
-            await new Promise(r => setTimeout(r, 200)); 
-        }
-        return combinedResults;
-    }
+                const lastTimestamp = timestamps[lastIndex];
+                const lastDate = new Date(lastTimestamp * 1000);
+                
+                // Fallback for prevClose if meta is missing or unreliable
+                if (!prevClose) {
+                     for (let j = lastIndex - 1; j >= 0; j--) {
+                         if (closes[j] !== null) { prevClose = closes[j]; break; }
+                     }
+                }
 
-    // 2. Fetch History (Batch) - Used for Sparklines/Trends
-    async function fetchBatchHistory(tickers) {
-        if (!tickers || tickers.length === 0) return {};
-        
-        const chunks = chunkArray(tickers, 4);
-        let combinedResults = {};
-        
-        const proxies = [
-            'https://api.codetabs.com/v1/proxy?quest=',
-            'https://api.allorigins.win/raw?url='
-        ];
-
-        for (const chunk of chunks) {
-            const validSymbols = chunk.filter(t => t && t !== 'Cash');
-            if(validSymbols.length === 0) continue;
-
-            const symbolStr = validSymbols.join(',');
-            const url = `https://query1.finance.yahoo.com/v7/finance/spark?symbols=${symbolStr}&range=5y&interval=1d`;
-            
-            let chunkSuccess = false;
-
-            for (const proxy of proxies) {
-                if (chunkSuccess) break;
-                try {
-                    const res = await fetch(proxy + encodeURIComponent(url));
-                    if (!res.ok) continue;
-
-                    const json = await res.json();
-                    const data = json.contents ? JSON.parse(json.contents) : json;
-
-                    if (data.spark && data.spark.result) {
-                        data.spark.result.forEach(item => {
-                            const symbol = item.symbol;
-                            const response = item.response[0];
-                            const closes = response.indicators.quote[0].close;
-                            const timestamps = response.timestamp;
-                            
-                            // Clean nulls
-                            const cleanC = []; const cleanT = [];
-                            if (closes && timestamps) {
-                                closes.forEach((c, i) => { 
-                                    if (c !== null && c !== undefined) { 
-                                        cleanC.push(c); 
-                                        cleanT.push(timestamps[i]); 
-                                    }
-                                });
-                            }
-
-                            if (cleanC.length > 0) {
-                                const current = cleanC[cleanC.length - 1];
-                                const getAgo = (days) => {
-                                    const target = cleanT[cleanT.length - 1] - (days * 86400);
-                                    for (let i = cleanT.length - 1; i >= 0; i--) {
-                                        if (cleanT[i] <= target) return cleanC[i];
-                                    }
-                                    return cleanC[0];
-                                };
-
-                                combinedResults[symbol] = {
-                                    p1w: (current - getAgo(7)) / getAgo(7),
-                                    p1m: (current - getAgo(30)) / getAgo(30),
-                                    p3m: (current - getAgo(90)) / getAgo(90),
-                                    p6m: (current - getAgo(180)) / getAgo(180),
-                                    p1y: (current - getAgo(365)) / getAgo(365),
-                                    p5y: (current - getAgo(1825)) / getAgo(1825),
-                                    pMax: (current - cleanC[0]) / cleanC[0]
-                                };
-                            }
-                        });
-                        chunkSuccess = true;
+                // Helper to find price N days/months ago
+                const getPriceAgo = (amt, mode) => {
+                    const targetDate = new Date(lastDate);
+                    if (mode === 'days') targetDate.setDate(targetDate.getDate() - amt);
+                    if (mode === 'months') targetDate.setMonth(targetDate.getMonth() - amt);
+                    if (mode === 'years') targetDate.setFullYear(targetDate.getFullYear() - amt);
+                    
+                    for (let i = lastIndex; i >= 0; i--) {
+                        if (timestamps[i] <= targetDate.getTime() / 1000 && closes[i] !== null) {
+                            return closes[i];
+                        }
                     }
-                } catch (e) { }
+                    return closes.find(c => c !== null); // fallback to earliest
+                };
+
+                // Calculate Month To Date Baseline (For Account Value)
+                const now = new Date();
+                const startOfCurrentMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+                let mtdBaseline = null;
+                for (let i = timestamps.length - 1; i >= 0; i--) {
+                    if (new Date(timestamps[i] * 1000) < startOfCurrentMonth && closes[i]) {
+                        mtdBaseline = closes[i]; break;
+                    }
+                }
+
+                return { 
+                    price: currentPrice,
+                    ts: lastTimestamp,
+                    mtdRate: (mtdBaseline && currentPrice) ? (currentPrice - mtdBaseline) / mtdBaseline : 0,
+                    
+                    // METRICS
+                    // 1D: Explicitly uses (Live - Official Prev Close) / Official Prev Close
+                    p1d: (prevClose && currentPrice) ? (currentPrice - prevClose) / prevClose : 0,
+                    
+                    p1w: (getPriceAgo(7, 'days') && currentPrice) ? (currentPrice - getPriceAgo(7, 'days')) / getPriceAgo(7, 'days') : 0,
+                    p1m: (getPriceAgo(1, 'months') && currentPrice) ? (currentPrice - getPriceAgo(1, 'months')) / getPriceAgo(1, 'months') : 0,
+                    p3m: (getPriceAgo(3, 'months') && currentPrice) ? (currentPrice - getPriceAgo(3, 'months')) / getPriceAgo(3, 'months') : 0,
+                    p6m: (getPriceAgo(6, 'months') && currentPrice) ? (currentPrice - getPriceAgo(6, 'months')) / getPriceAgo(6, 'months') : 0,
+                    p1y: (getPriceAgo(1, 'years') && currentPrice) ? (currentPrice - getPriceAgo(1, 'years')) / getPriceAgo(1, 'years') : 0,
+                    p3y: (getPriceAgo(3, 'years') && currentPrice) ? (currentPrice - getPriceAgo(3, 'years')) / getPriceAgo(3, 'years') : 0,
+                    p5y: (getPriceAgo(5, 'years') && currentPrice) ? (currentPrice - getPriceAgo(5, 'years')) / getPriceAgo(5, 'years') : 0,
+                    pMax: (closes[0] && currentPrice) ? (currentPrice - closes[0]) / closes[0] : 0
+                };
+
+            } catch (e) {
+                console.warn(`Proxy failed for ${cleanTicker}`);
             }
-            await new Promise(r => setTimeout(r, 200));
         }
-        return combinedResults;
+        return null; 
     }
-    // ==========================================
-    // MAIN UPDATE FUNCTION (Correct Mapping & Batching)
-    // ==========================================
+
     async function updateWithLiveMarketData(accounts, isSilent = false) {
         if (isUpdating) return;
         isUpdating = true;
         
+        const statusDiv = document.getElementById('loading');
         const headerStatus = document.getElementById('latest-date-display');
         const btn = document.getElementById('manual-refresh-btn');
         
-        // Seamless loading state
-        if(headerStatus) headerStatus.innerHTML = "<span class='live-dot' style='background:orange'></span> Updating...";
-        if(btn) btn.innerHTML = "<i class='fas fa-sync fa-spin'></i>";
-
+        if (!isSilent) {
+            statusDiv.style.opacity = '1';
+            statusDiv.style.display = 'flex';
+            statusDiv.innerHTML = "Fetching Real-Time Market Data...<br><span style='font-size:0.8em; font-weight:normal'>Calculating Multi-Year Performance...</span>";
+        } else {
+            headerStatus.innerHTML = "<span class='live-dot'></span> Updating...";
+            headerStatus.style.color = "#e67e22";
+            if(btn) btn.innerHTML = "<span>↻</span> ...";
+        }
+        
+        const now = new Date();
+        const currentYear = now.getFullYear();
+        const currentMonthVal = now.getMonth() + 1; 
+        const currentMonthKey = `${currentYear}-${String(currentMonthVal).padStart(2, '0')}`;
+        
+        // WATCHLIST FETCH
+        watchlistDataStore = [];
         try {
-            // 1. PREPARE TICKERS (Set ensures uniqueness)
-            const allTickers = new Set();
-            
-            // From Watchlist
-            if (typeof userWatchlist !== 'undefined') {
-                userWatchlist.forEach(t => allTickers.add(t));
-            }
-            
-            // From Accounts (Apply Overrides & Mappings)
-            accounts.forEach(acc => {
+             await Promise.all(userWatchlist.map(async (ticker) => {
+                 const data = await getExtendedPerformance(ticker);
+                 if(data) {
+                     watchlistDataStore.push({
+                         ticker: ticker,
+                         price: data.price,
+                         dayChange: data.p1d,
+                         // Additional Metrics
+                         p1w: data.p1w, p1m: data.p1m, p3m: data.p3m, 
+                         p6m: data.p6m, p1y: data.p1y, p3y: data.p3y, 
+                         p5y: data.p5y, pMax: data.pMax
+                     });
+                 } else {
+                      watchlistDataStore.push({ ticker: ticker, price: 0, dayChange: 0, error: true });
+                 }
+             }));
+             renderWatchlistColumns();
+        } catch(e) { console.error("Watchlist Error", e); }
+
+
+        // ACCOUNT FETCH (Uses simplified MTD logic within extended fetch or re-uses same logic)
+        try {
+            await Promise.all(accounts.map(async (acc) => {
+                if (acc.data.length === 0) return;
+                
+                // CHECK FOR OVERRIDE TICKER
                 const override = accountOverrides[acc.id];
-                let ticker = override ? override.ticker : (acc.data[acc.data.length-1]?.invested);
-                
-                // --- CRITICAL MAPPING FIX ---
-                // Map invalid/custom names to real tickers BEFORE adding to list
-                if (acc.id.toLowerCase().includes('fidelity')) ticker = 'GOOGL';
-                if (acc.id.toLowerCase().includes('cash')) ticker = 'BIL'; 
-                if (ticker === 'Cash') ticker = 'BIL'; 
-                if (ticker === 'BOND') ticker = 'BND';
+                let ticker = override ? override.ticker : null;
 
-                if (ticker && ticker !== 'Unknown' && ticker !== '-') {
-                    const realTicker = TICKER_MAP[ticker] || ticker.split(' ')[0];
-                    acc._tempTicker = realTicker; // Store mapped ticker on account object for later
-                    allTickers.add(realTicker);
-                }
-            });
-
-            // Convert to array and filter out any remaining bad data
-            const tickerArray = Array.from(allTickers).filter(t => t && t !== 'Cash');
-            console.log("Fetching Batches:", tickerArray);
-
-            // 2. FETCH DATA (Parallel Batch Requests)
-            const [quotes, history] = await Promise.all([
-                fetchBatchQuotes(tickerArray),
-                fetchBatchHistory(tickerArray)
-            ]);
-
-            // 3. UPDATE WATCHLIST UI
-            if (typeof userWatchlist !== 'undefined') {
-                watchlistDataStore = [];
-                userWatchlist.forEach(ticker => {
-                    const clean = TICKER_MAP[ticker] || ticker;
-                    // Handle case where ticker was mapped (e.g. Cash -> BIL)
-                    const lookup = (clean === 'Cash') ? 'BIL' : clean;
-                    
-                    const q = quotes[lookup] || {};
-                    const h = history[lookup] || {};
-                    
-                    if (q.price) {
-                        watchlistDataStore.push({
-                            ticker: ticker,
-                            price: q.price,
-                            dayChange: q.p1d,
-                            p1w: h.p1w || 0, p1m: h.p1m || 0, p3m: h.p3m || 0,
-                            p6m: h.p6m || 0, p1y: h.p1y || 0, p3y: 0, 
-                            p5y: h.p5y || 0, pMax: h.pMax || 0
-                        });
+                const startOfThisMonth = new Date(currentYear, currentMonthVal - 1, 1);
+                let baselineEntry = null;
+                for (let i = acc.data.length - 1; i >= 0; i--) {
+                    if (acc.data[i].dateObj < startOfThisMonth) {
+                        baselineEntry = acc.data[i];
+                        break;
                     }
-                });
-                if (typeof renderWatchlistColumns === 'function') renderWatchlistColumns();
-            }
-
-            // 4. UPDATE ACCOUNTS
-            let totalDayChange = 0;
-            let runningTotal = 0;
-
-            accounts.forEach(acc => {
-                const ticker = acc._tempTicker; // Use the mapped ticker we stored earlier
-                
-                // If no ticker (e.g. manual real estate), just add existing value
-                if (!ticker) {
-                    if (acc.value) runningTotal += acc.value;
-                    return;
                 }
 
-                const q = quotes[ticker];
-                const h = history[ticker] || {};
+                if (!baselineEntry) return;
 
-                if (q && q.price) {
-                    acc.livePrice = q.price;
-                    acc.lastUpdated = q.ts;
-                    
-                    acc.stats = {
-                        p1d: q.p1d,
-                        p1w: h.p1w, p1m: h.p1m, p3m: h.p3m,
-                        p6m: h.p6m, p1y: h.p1y, p5y: h.p5y,
-                        mtd: h.p1m 
+                let liveEntry = acc.data.find(d => d.key === currentMonthKey);
+                let isNewRow = false;
+
+                if (!liveEntry) {
+                    isNewRow = true;
+                    liveEntry = {
+                        key: currentMonthKey,
+                        dateObj: startOfThisMonth,
+                        deposits: 0,
+                        income: 0,
+                        marketGain: 0,
+                        cumulative: baselineEntry.cumulative,
+                        balance: baselineEntry.balance,
+                        invested: baselineEntry.invested,
+                        rawWithdrawals: 0, 
+                        isLive: true,
+                        isError: false,
+                        timestamp: 0 
                     };
-                    acc.p1d = q.p1d;
-                    acc.dayChange = q.p1d;
+                } else {
+                    liveEntry.isLive = true;
+                    liveEntry.isError = false;
+                }
 
-                    // Calculate Value
-                    const override = accountOverrides[acc.id];
-                    const lastMonth = acc.data[acc.data.length-1];
-                    
-                    if (override && override.qty) {
-                        acc.value = q.price * override.qty;
-                    } else if (lastMonth) {
-                        // Estimate based on monthly growth if no share count
-                        const growth = h.p1m || 0;
-                        acc.value = lastMonth.balance * (1 + growth);
-                    }
+                if(!ticker) {
+                    ticker = liveEntry.invested; 
+                    if (acc.id.includes('fidelity')) ticker = 'GOOGL';
+                    if (acc.id.includes('boeing')) ticker = 'Boeing (Bonds)';
+                    if (acc.id.includes('wells')) ticker = 'Wells Fargo (Cash)';
+                }
 
-                    if (acc.value) {
-                         const gainAmt = acc.value - (acc.value / (1 + q.p1d));
-                         totalDayChange += gainAmt;
-                         runningTotal += acc.value;
+                const marketData = await getExtendedPerformance(ticker);
+                
+                if (marketData === null) {
+                    liveEntry.isError = true;
+                    if (isNewRow) {
+                        liveEntry.marketGain = 0;
+                        liveEntry.balance = baselineEntry.balance + liveEntry.deposits + liveEntry.income;
                     }
                 } else {
-                    // Failover: Keep old value if fetch failed
-                    if(acc.value) runningTotal += acc.value;
+                    const growthAmount = baselineEntry.balance * marketData.mtdRate;
+                    liveEntry.marketGain = growthAmount; 
+                    liveEntry.balance = baselineEntry.balance + growthAmount + liveEntry.deposits + liveEntry.income;
+                    liveEntry.cumulative = baselineEntry.cumulative + growthAmount + liveEntry.income;
+                    liveEntry.timestamp = marketData.ts;
+                    // IF OVERRIDE QTY EXISTS, RECALCULATE BALANCE BASED ON PRICE * QTY
+                    if(override && override.qty) {
+                         liveEntry.balance = marketData.price * override.qty;
+                         liveEntry.marketGain = liveEntry.balance - liveEntry.deposits - liveEntry.income - baselineEntry.balance; 
+                         liveEntry.cumulative = baselineEntry.cumulative + liveEntry.marketGain + liveEntry.income; // Approx
+                    }
                 }
-            });
 
-            // 5. UPDATE HEADERS
-            const nw = document.getElementById('stat-networth');
-            const dc = document.getElementById('stat-day-change');
-            
-            if(nw) nw.innerText = fmtMoney(runningTotal);
-            if(dc) {
-                const pct = runningTotal > 0 ? (totalDayChange / (runningTotal - totalDayChange)) * 100 : 0;
-                const color = totalDayChange >= 0 ? 'var(--profit)' : 'var(--loss)';
-                const sign = totalDayChange >= 0 ? '+' : '';
-                dc.innerHTML = `<span style="color:${color}">${sign}${fmtMoney(totalDayChange)} (${sign}${pct.toFixed(2)}%)</span>`;
-            }
-
+                if (isNewRow) {
+                    acc.data.push(liveEntry);
+                }
+            }));
         } catch (e) {
-            console.error("Batch Update Error:", e);
+            console.error(e);
         } finally {
             isUpdating = false;
-            if (btn) btn.innerHTML = "<span>↻</span> Update";
-            if(headerStatus) {
-                const time = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-                headerStatus.innerHTML = `<span class='live-dot'></span> Live ${time}`;
-            }
-            if (typeof processAndRender === 'function') processAndRender(accounts, true);
+            if(btn) btn.innerHTML = "<span>↻</span> Update";
         }
     }
-    // ==========================================
-    // ==========================================
-    // ==========================================
-
     
     function renderWatchlistColumns() {
         // Filter into two arrays
@@ -2081,40 +2021,27 @@
         return minutesOfDay >= start && minutesOfDay < end;
     }
 
-    // UPDATED: Handles long-running updates gracefully
     function startAutoRefresh() {
-        if (window.marketInterval) clearInterval(window.marketInterval);
+        let isMarket = isMarketOpen();
+        refreshTimer = isMarket ? 10 : 60;
 
-        // Set initial timer based on market status
-        let refreshCount = isMarketOpen() ? 15 : 60; 
-
-        window.marketInterval = setInterval(() => {
-            const timerEl = document.getElementById('refresh-timer');
-            const statusEl = document.getElementById('marketStatus'); // Or your status header
-
-            // 1. If currently updating, Show "Busy" state and DO NOT count down
-            if (isUpdating) {
-                if(timerEl) timerEl.innerText = "Updating...";
-                return; 
+        setInterval(() => {
+            refreshTimer--;
+            
+            const currentMarketStatus = isMarketOpen();
+            if (currentMarketStatus !== isMarket) {
+                isMarket = currentMarketStatus;
             }
-
-            // 2. Count Down
-            refreshCount--;
-            if (timerEl) timerEl.innerText = `Update in ${refreshCount}s`;
-
-            // 3. Trigger Update
-            if (refreshCount <= 0) {
-                console.log("Triggering Auto-Refresh...");
+            
+            if (refreshTimer <= 0) {
+                console.log("Auto-Refreshing Market Data...");
+                updateWithLiveMarketData(globalAccountsData, true); 
+                processAndRender(globalAccountsData, true); 
                 
-                // Pass the global 'accounts' variable safely
-                // Ensure 'globalAccountsData' or 'accounts' matches your variable name
-                const targetAccounts = (typeof globalAccountsData !== 'undefined') ? globalAccountsData : accounts;
-                
-                updateWithLiveMarketData(targetAccounts, true);
-                
-                // Reset Timer
-                refreshCount = isMarketOpen() ? 15 : 60;
+                refreshTimer = isMarket ? 10 : 60;
             }
+            
+            document.getElementById('refresh-timer').innerText = `Updates in ${refreshTimer}s`;
         }, 1000);
     }
 
@@ -2770,29 +2697,3 @@
 </script>
 </body>
 </html>
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
