@@ -1290,7 +1290,8 @@
             mtdRate: p1m // Approx for MTD
         };
     }
-    // COMPLETED FUNCTION: Fixes "accounts undefined" error and runs sequentially
+    // COMPLETED FUNCTION: Sequentially updates Watchlist AND Accounts
+    // Fixes "accounts is not defined" and ensures correct 1D/1W values
     async function updateWithLiveMarketData(accounts, isSilent = false) {
         if (isUpdating) return;
         isUpdating = true;
@@ -1298,14 +1299,16 @@
         const statusDiv = document.getElementById('loading');
         const headerStatus = document.getElementById('latest-date-display');
         const btn = document.getElementById('manual-refresh-btn');
-        const netWorthEl = document.getElementById('stat-networth');
         
+        // 1. UI Feedback
         if (!isSilent) {
-            statusDiv.style.opacity = '1';
-            statusDiv.style.display = 'flex';
-            statusDiv.innerHTML = "Fetching Real-Time Market Data...<br><span style='font-size:0.8em; font-weight:normal'>Updating One-by-One to prevent errors...</span>";
+            if(statusDiv) {
+                statusDiv.style.opacity = '1';
+                statusDiv.style.display = 'flex';
+                statusDiv.innerHTML = "Fetching Real-Time Market Data...<br><span style='font-size:0.8em; font-weight:normal'>Updating One-by-One for accuracy...</span>";
+            }
         } else {
-            headerStatus.innerHTML = "<span class='live-dot'></span> Updating...";
+            if(headerStatus) headerStatus.innerHTML = "<span class='live-dot'></span> Updating...";
             if(btn) btn.innerHTML = "<span>↻</span> ...";
         }
         
@@ -1315,42 +1318,46 @@
         const currentMonthKey = `${currentYear}-${String(currentMonthVal).padStart(2, '0')}`;
         
         try {
-            // --- 1. WATCHLIST SEQUENTIAL UPDATE ---
+            // --- 2. UPDATE WATCHLIST (Sequential) ---
             watchlistDataStore = [];
-            for (const ticker of userWatchlist) {
-                 const data = await getExtendedPerformance(ticker);
-                 if(data && data.price > 0) {
-                     watchlistDataStore.push({
-                         ticker: ticker,
-                         price: data.price,
-                         dayChange: data.p1d,
-                         p1w: data.p1w, p1m: data.p1m, p3m: data.p3m, 
-                         p6m: data.p6m, p1y: data.p1y, p3y: data.p3y, 
-                         p5y: data.p5y, pMax: data.pMax
-                     });
+            // Assuming 'userWatchlist' is your global array of tickers like ['NVDA', 'TSLA']
+            if (typeof userWatchlist !== 'undefined' && userWatchlist.length > 0) {
+                 for (const ticker of userWatchlist) {
+                     const data = await getExtendedPerformance(ticker);
+                     if(data && data.price > 0) {
+                         watchlistDataStore.push({
+                             ticker: ticker,
+                             price: data.price,
+                             dayChange: data.p1d, // Correctly from Quote API
+                             p1w: data.p1w, p1m: data.p1m, p3m: data.p3m, 
+                             p6m: data.p6m, p1y: data.p1y, p3y: data.p3y, 
+                             p5y: data.p5y, pMax: data.pMax
+                         });
+                     }
                  }
+                 if (typeof renderWatchlistColumns === 'function') renderWatchlistColumns();
             }
-            renderWatchlistColumns();
 
-            // --- 2. ACCOUNTS SEQUENTIAL UPDATE ---
-            // Use 'for...of' loop to wait for each request (prevents 429 errors)
+            // --- 3. UPDATE ACCOUNTS (Sequential) ---
             let runningTotal = 0;
+            let totalDayChange = 0;
             
             for (const acc of accounts) {
-                if (acc.data.length === 0) continue;
+                if (!acc.data || acc.data.length === 0) continue;
                 
-                // SETUP: Get Baseline (Last Month)
+                // A. Find Baseline (Last Month's Entry)
                 const startOfThisMonth = new Date(currentYear, currentMonthVal - 1, 1);
                 let baselineEntry = null;
+                // Look backwards for the most recent entry BEFORE this month
                 for (let i = acc.data.length - 1; i >= 0; i--) {
                     if (acc.data[i].dateObj < startOfThisMonth) {
                         baselineEntry = acc.data[i];
                         break;
                     }
                 }
-                if (!baselineEntry) continue;
+                if (!baselineEntry) continue; // Cannot calculate live gain without baseline
 
-                // SETUP: Get or Create Live Entry
+                // B. Get or Create Live Entry for Current Month
                 let liveEntry = acc.data.find(d => d.key === currentMonthKey);
                 let isNewRow = false;
 
@@ -1367,77 +1374,120 @@
                     };
                 }
 
-                // DETERMINE TICKER
+                // C. Determine Ticker
                 const override = accountOverrides[acc.id];
                 let ticker = override ? override.ticker : liveEntry.invested;
+                // Fallbacks for known accounts if ticker is missing
                 if(!ticker || ticker === '-') {
-                    if (acc.id.includes('fidelity')) ticker = 'GOOGL';
-                    if (acc.id.includes('boeing')) ticker = 'BND';
-                    if (acc.id.includes('wells')) ticker = 'BIL';
+                    if (acc.id.toLowerCase().includes('fidelity')) ticker = 'GOOGL'; // Example
+                    if (acc.id.toLowerCase().includes('cash')) ticker = 'BIL'; 
                 }
 
-                // UPDATE STATUS UI
-                if(!isSilent) statusDiv.innerHTML = `Fetching Real-Time Market Data...<br><span style='font-size:0.8em'>Updating ${acc.name} (${ticker})...</span>`;
-                else headerStatus.innerHTML = `<span class='live-dot'></span> ${acc.name}...`;
+                // D. Update UI Status
+                if(!isSilent && statusDiv) {
+                     statusDiv.innerHTML = `Fetching Real-Time Market Data...<br><span style='font-size:0.8em'>Updating ${acc.name} (${ticker || 'Manual'})...</span>`;
+                }
 
-                // FETCH DATA (Waits for delay)
+                // E. Fetch Data
+                // Skip fetch if manual/cash account
+                if (!ticker || ticker === 'Unknown' || ticker === '-') {
+                     // Even if no fetch, we preserve the baseline logic
+                     if (isNewRow) acc.data.push(liveEntry);
+                     continue; 
+                }
+
                 const marketData = await getExtendedPerformance(ticker);
                 
                 if (marketData && marketData.price > 0) {
                     liveEntry.isError = false;
                     liveEntry.timestamp = marketData.ts;
-                    
-                    // Logic: Balance = Price * Shares
-                    // Since we don't track shares explicitly in sheet, we derive them from baseline
-                    // OR we just apply the % growth to the baseline balance
-                    
+                    acc.livePrice = marketData.price;
+                    acc.lastUpdated = marketData.ts;
+
+                    // STORE STATS (Crucial for the Columns 1D, 1W, etc.)
+                    acc.stats = {
+                        p1d: marketData.p1d,
+                        p1w: marketData.p1w,
+                        p1m: marketData.p1m,
+                        p3m: marketData.p3m,
+                        p6m: marketData.p6m,
+                        p1y: marketData.p1y,
+                        p5y: marketData.p5y,
+                        mtd: marketData.mtdRate,
+                        max: marketData.pMax
+                    };
+
+                    // F. Calculate New Balance
                     if (override && override.qty) {
-                        // Exact Calc if user provided qty
-                        liveEntry.balance = marketData.price * override.qty;
-                        liveEntry.marketGain = liveEntry.balance - liveEntry.deposits - liveEntry.income - baselineEntry.balance;
-                        liveEntry.cumulative = baselineEntry.cumulative + liveEntry.marketGain + liveEntry.income;
+                        // PRECISE: Price * Quantity
+                        const newBalance = marketData.price * override.qty;
+                        liveEntry.balance = newBalance;
+                        // Gain = NewBalance - (Baseline + Deposits)
+                        liveEntry.marketGain = newBalance - (baselineEntry.balance + liveEntry.deposits + liveEntry.income);
                     } else {
-                        // Approx Calc based on monthly growth
-                        // We use p1m (Month change) or mtd logic
-                        // Fallback: If MTD is 0, we can use (CurrentPrice - MonthStartPrice)/MonthStartPrice
-                        // But for stability, let's use the raw price difference if we knew the start price
-                        
-                        // SIMPLEST RELIABLE METHOD:
-                        // Assume baseline balance bought 'X' shares at month start price.
-                        // New Balance = X * Current Price.
-                        // We lack "Month Start Price" exactly, but we can approximate using p1m
-                        
-                        // Let's use the % change from 1 Month ago (p1m) as a proxy for MTD if MTD is 0
-                        const growthRate = marketData.p1m || 0; 
+                        // ESTIMATED: Apply Monthly Growth Rate to Baseline
+                        // If we don't have shares, we assume the baseline balance grows by the ticker's MTD%
+                        const growthRate = marketData.mtdRate || 0; 
                         const estimatedGain = baselineEntry.balance * growthRate;
                         
                         liveEntry.marketGain = estimatedGain;
                         liveEntry.balance = baselineEntry.balance + estimatedGain + liveEntry.deposits + liveEntry.income;
-                        liveEntry.cumulative = baselineEntry.cumulative + estimatedGain + liveEntry.income;
                     }
+                    
+                    liveEntry.cumulative = baselineEntry.cumulative + liveEntry.marketGain + liveEntry.income;
+
+                    // Calculate Day Change ($) for Header
+                    // CurrentValue - (CurrentValue / (1 + %Change))
+                    const val = liveEntry.balance;
+                    const changeAmt = val - (val / (1 + marketData.p1d));
+                    totalDayChange += changeAmt;
 
                 } else {
                     liveEntry.isError = true;
                 }
 
                 if (isNewRow) acc.data.push(liveEntry);
-                
-                // Add to running total for cool visual effect
                 if (liveEntry.balance) runningTotal += liveEntry.balance;
+            }
+            
+            // --- 4. Update Header Stats ---
+            const netWorthEl = document.getElementById('stat-networth');
+            const dailyChangeEl = document.getElementById('stat-day-change'); // Ensure this ID exists in your HTML
+            
+            if (netWorthEl) netWorthEl.innerText = fmtMoney(runningTotal);
+            
+            if (dailyChangeEl) {
+                 const sign = totalDayChange >= 0 ? '+' : '';
+                 const color = totalDayChange >= 0 ? 'var(--profit)' : 'var(--loss)';
+                 // Calculate total % change of the portfolio for the day
+                 const totalPct = runningTotal > 0 ? (totalDayChange / (runningTotal - totalDayChange)) * 100 : 0;
+                 
+                 dailyChangeEl.innerHTML = `<span style="color:${color}">${sign}${fmtMoney(totalDayChange)} (${sign}${totalPct.toFixed(2)}%)</span>`;
             }
 
         } catch (e) {
             console.error("Update Error", e);
         } finally {
             isUpdating = false;
+            
+            // Reset UI
             if(btn) btn.innerHTML = "<span>↻</span> Update";
-            if(!isSilent) {
+            if(headerStatus) {
+                const time = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                headerStatus.innerHTML = `<span class='live-dot'></span> Live ${time}`;
+            }
+            if(!isSilent && statusDiv) {
                  statusDiv.style.opacity = '0';
                  setTimeout(() => { statusDiv.style.display = 'none'; }, 300);
             }
+            
+            // TRIGGER FULL RENDER
+            // This ensures the table and charts redraw with the new data
+            if (typeof processAndRender === 'function') {
+                processAndRender(accounts, true); // true = preserve view
+            }
         }
     }
-    
     function renderWatchlistColumns() {
         // Filter into two arrays
         const gainers = watchlistDataStore.filter(i => i.dayChange >= 0).sort((a,b) => b.dayChange - a.dayChange);
@@ -2752,6 +2802,7 @@
 </script>
 </body>
 </html>
+
 
 
 
