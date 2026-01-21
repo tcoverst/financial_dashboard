@@ -1152,18 +1152,19 @@
     // UPDATED: Uses Query1/Query2 rotation and removes dead proxies
     // UPDATED: Uses Query1/Query2 rotation and removes dead proxies
     // GLOBAL STATE: Tracks which proxies are "Dead" to avoid retrying them
+    // GLOBAL: Tracks proxies that are blocked or down so we don't retry them
     const deadProxies = new Set();
 
-    // UPDATED: Smart Proxy Rotator with "Kill Switch" for blocked proxies
+    // UPDATED: Prioritizes CodeTabs and rotates Yahoo Endpoints
     async function getExtendedPerformance(ticker) {
         if (!ticker || ticker === 'Unknown' || ticker === '-') return null;
         const cleanTicker = TICKER_MAP[ticker] || ticker.split(' ')[0]; 
         
-        // Cache Buster: Updates every 60s to prevent stale data but avoid spamming
+        // Cache Buster: Updates every 60s
         const cacheBuster = Math.floor(Date.now() / 60000); 
 
         // TIMEOUT HELPER
-        const fetchWithTimeout = async (url, timeout = 5000) => {
+        const fetchWithTimeout = async (url, timeout = 6000) => {
             const controller = new AbortController();
             const id = setTimeout(() => controller.abort(), timeout);
             try {
@@ -1173,76 +1174,69 @@
             } catch (err) { clearTimeout(id); throw err; }
         };
 
-        // DELAY: Essential for sequential processing
-        const randomDelay = Math.floor(Math.random() * 500) + 200;
+        // DELAY: 0.5s - 1.0s delay to prevent Rate Limiting (429 Errors)
+        const randomDelay = Math.floor(Math.random() * 500) + 500;
         await new Promise(r => setTimeout(r, randomDelay));
 
-        // 1. PROXY LIST (Prioritized)
+        // 1. PROXY LIST (Removed blocked 'corsproxy.io')
         const allProxies = [
-            'https://api.codetabs.com/v1/proxy?quest=', // Best chance
-            'https://api.allorigins.win/raw?url=',      // Good backup
-            'https://corsproxy.io/?'                    // Last resort (Currently blocking you)
+            'https://api.codetabs.com/v1/proxy?quest=', // Primary (Most reliable)
+            'https://api.allorigins.win/raw?url=',      // Secondary
+            'https://thingproxy.freeboard.io/fetch/'    // Tertiary
         ];
 
-        // Filter out proxies that have already failed with 401/403
+        // Filter out known bad proxies
         const activeProxies = allProxies.filter(p => !deadProxies.has(p));
 
-        // 2. ENDPOINTS (Yahoo has two identical servers)
+        // 2. ENDPOINTS (Rotate Query1 and Query2)
         const endpoints = [
             'https://query1.finance.yahoo.com',
             'https://query2.finance.yahoo.com'
         ];
-
-        let quoteData = null;
-        let chartData = null;
 
         // --- FETCH ENGINE ---
         async function tryFetch(path) {
             for (const proxy of activeProxies) {
                 for (const domain of endpoints) {
                     try {
-                        // Construct URL
                         const targetUrl = `${domain}${path}&_cb=${cacheBuster}`;
                         const finalUrl = proxy + encodeURIComponent(targetUrl);
                         
                         const res = await fetchWithTimeout(finalUrl);
                         
-                        // KILL SWITCH: If blocked, mark proxy as dead
-                        if (res.status === 401 || res.status === 403) {
+                        // KILL SWITCH: If blocked (401/403) or Server Error (500), kill the proxy
+                        if (res.status === 401 || res.status === 403 || res.status === 500) {
                             console.warn(`[Blocked] Disabling proxy: ${proxy}`);
                             deadProxies.add(proxy);
-                            break; // Stop using this proxy immediately
+                            break; 
                         }
                         
                         if (!res.ok) continue;
 
                         const text = await res.text();
                         
-                        // Parse JSON (Handle wrappers)
+                        // Parse JSON (Handle various proxy wrappers)
                         let data;
                         try { data = JSON.parse(text); } catch(e) { continue; }
                         if (data.contents) {
                             try { data = JSON.parse(data.contents); } catch(e) { } 
                         }
 
-                        // Validation
                         if (data.quoteResponse?.result?.length > 0) return data.quoteResponse.result[0];
                         if (data.chart?.result?.length > 0) return data.chart.result[0];
 
-                    } catch (e) { 
-                        // Network error, try next combination
-                    }
+                    } catch (e) { }
                 }
             }
             return null;
         }
 
         // STEP A: GET QUOTE (Price)
-        quoteData = await tryFetch(`/v7/finance/quote?symbols=${cleanTicker}`);
+        const quoteData = await tryFetch(`/v7/finance/quote?symbols=${cleanTicker}`);
 
-        // STEP B: GET CHART (History) - Only if Quote didn't provide everything or we need history
-        // 5y range is safer than 'max'
-        chartData = await tryFetch(`/v8/finance/chart/${cleanTicker}?range=5y&interval=1d`);
+        // STEP B: GET CHART (History) - Only if needed
+        // We use 5y to ensure we can calculate 1D change accurately manually if needed
+        const chartData = await tryFetch(`/v8/finance/chart/${cleanTicker}?range=5y&interval=1d`);
 
         if (!quoteData && !chartData) return null;
 
@@ -1256,7 +1250,7 @@
             if (closes.length >= 2) prevClose = closes[closes.length - 2];
         }
 
-        // Manual 1D Calculation (Prevents 0.00% bug)
+        // Manual 1D Calculation
         let p1d = 0;
         if (currentPrice && prevClose) p1d = (currentPrice - prevClose) / prevClose;
 
@@ -2739,6 +2733,7 @@
 </script>
 </body>
 </html>
+
 
 
 
