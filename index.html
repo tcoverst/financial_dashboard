@@ -1149,11 +1149,13 @@
     // 1. ROBUST FETCH FUNCTION (Manual Calc Fix)
     // ==========================================
     // FIXED: Manually finds "Yesterday's Close" from the array to avoid 5-Year bug
+    // UPDATED: Includes Cache-Busting to force "Fresh" data on every call
     async function getExtendedPerformance(ticker) {
         if (!ticker || ticker === 'Unknown' || ticker === '-') return null;
         const cleanTicker = TICKER_MAP[ticker] || ticker.split(' ')[0]; 
+        const cacheBuster = Date.now(); // Unique timestamp
 
-        // 1. Setup
+        // Timeout Helper
         const fetchWithTimeout = async (url, timeout = 3000) => {
             const controller = new AbortController();
             const id = setTimeout(() => controller.abort(), timeout);
@@ -1164,14 +1166,19 @@
             } catch (err) { clearTimeout(id); throw err; }
         };
 
+        const randomDelay = Math.floor(Math.random() * 300) + 100;
+        await new Promise(r => setTimeout(r, randomDelay));
+
         const proxies = ['https://corsproxy.io/?', 'https://api.allorigins.win/raw?url='];
-        const quoteUrl = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${cleanTicker}`;
-        const chartUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${cleanTicker}?range=5y&interval=1d`;
+        
+        // ADDED CACHE BUSTER (&_cb=...)
+        const quoteUrl = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${cleanTicker}&_cb=${cacheBuster}`;
+        const chartUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${cleanTicker}?range=5y&interval=1d&_cb=${cacheBuster}`;
 
         let quoteData = null;
         let chartData = null;
 
-        // 2. Fetch Quote (Fastest, most accurate for 1D)
+        // 1. Fetch Quote
         for (const proxy of proxies) {
             try {
                 const res = await fetchWithTimeout(proxy + encodeURIComponent(quoteUrl));
@@ -1186,7 +1193,7 @@
             } catch (e) { }
         }
 
-        // 3. Fetch Chart (Required for history)
+        // 2. Fetch Chart
         for (const proxy of proxies) {
             try {
                 const res = await fetchWithTimeout(proxy + encodeURIComponent(chartUrl));
@@ -1203,39 +1210,25 @@
 
         if (!quoteData && !chartData) return null;
 
-        // --- CRITICAL FIX: DETERMINE 1-DAY CHANGE CORRECTLY ---
-        let currentPrice = 0;
-        let prevClose = 0;
-        let p1d = 0;
-
-        // Priority 1: Use Quote Data (Best)
-        if (quoteData && quoteData.regularMarketPrice && quoteData.regularMarketPreviousClose) {
-            currentPrice = quoteData.regularMarketPrice;
-            prevClose = quoteData.regularMarketPreviousClose;
-            p1d = (currentPrice - prevClose) / prevClose;
-        } 
-        // Priority 2: Use Chart Data (Manual Calculation)
-        else if (chartData && chartData.indicators.quote[0].close) {
-            const closes = chartData.indicators.quote[0].close;
-            // Clean nulls from the end of the array
-            const cleanCloses = closes.filter(c => c !== null);
-            
-            if (cleanCloses.length >= 2) {
-                currentPrice = cleanCloses[cleanCloses.length - 1];
-                // THE FIX: Explicitly grab the 2nd to last item for Yesterday's Price
-                prevClose = cleanCloses[cleanCloses.length - 2]; 
-                p1d = (currentPrice - prevClose) / prevClose;
-            }
+        // --- CALCULATION LOGIC (Preserving your 1D Fix) ---
+        let currentPrice = quoteData?.regularMarketPrice || chartData?.meta?.regularMarketPrice || 0;
+        let prevClose = quoteData?.regularMarketPreviousClose || 0;
+        
+        // Fallback for Previous Close
+        if (!prevClose && chartData && chartData.indicators.quote[0].close) {
+            const closes = chartData.indicators.quote[0].close.filter(c => c !== null);
+            if (closes.length >= 2) prevClose = closes[closes.length - 2];
         }
 
-        // --- HISTORY CALCULATIONS (5y, 1y, etc) ---
+        let p1d = 0;
+        if (currentPrice && prevClose) p1d = (currentPrice - prevClose) / prevClose;
+
+        // History
         let p1w=0, p1m=0, p3m=0, p6m=0, p1y=0, p5y=0, pMax=0;
-        
         if (chartData && chartData.timestamp) {
             const closes = chartData.indicators.quote[0].close;
             const times = chartData.timestamp;
             const cleanC = [], cleanT = [];
-            
             closes.forEach((c, i) => { if (c) { cleanC.push(c); cleanT.push(times[i]); }});
 
             if (cleanC.length > 0) {
@@ -1245,7 +1238,6 @@
                     for(let i=cleanT.length-1; i>=0; i--) { if(cleanT[i] <= target) return cleanC[i]; }
                     return cleanC[0];
                 };
-
                 const v1w = getPriceAgo(7);
                 const v1m = getPriceAgo(30);
                 const v3m = getPriceAgo(90);
@@ -1267,8 +1259,7 @@
         return { 
             price: currentPrice, 
             ts: Date.now(), 
-            p1d: p1d, // Verified correct 1-Day change
-            p1w, p1m, p3m, p6m, p1y, p5y, pMax 
+            p1d, p1w, p1m, p3m, p6m, p1y, p5y, pMax 
         };
     }
 
@@ -2032,32 +2023,40 @@
         return minutesOfDay >= start && minutesOfDay < end;
     }
 
+    // UPDATED: Handles long-running updates gracefully
     function startAutoRefresh() {
-        let isMarket = isMarketOpen();
-        refreshTimer = isMarket ? 10 : 60;
+        if (window.marketInterval) clearInterval(window.marketInterval);
 
-        setInterval(() => {
-            refreshTimer--;
-            
-            const currentMarketStatus = isMarketOpen();
-            if (currentMarketStatus !== isMarket) {
-                isMarket = currentMarketStatus;
-            }
-            
-            if (refreshTimer <= 0) {
-                console.log("Auto-Refreshing Market Data...");
-                
-                // FORCE RESET: Ensure we never get stuck in "isUpdating" mode
-                isUpdating = false; 
-                
-                updateWithLiveMarketData(globalAccountsData, true); 
-                processAndRender(globalAccountsData, true); 
-                
-                refreshTimer = isMarket ? 10 : 60;
-            }
-            
+        // Set initial timer based on market status
+        let refreshCount = isMarketOpen() ? 15 : 60; 
+
+        window.marketInterval = setInterval(() => {
             const timerEl = document.getElementById('refresh-timer');
-            if(timerEl) timerEl.innerText = `Updates in ${refreshTimer}s`;
+            const statusEl = document.getElementById('marketStatus'); // Or your status header
+
+            // 1. If currently updating, Show "Busy" state and DO NOT count down
+            if (isUpdating) {
+                if(timerEl) timerEl.innerText = "Updating...";
+                return; 
+            }
+
+            // 2. Count Down
+            refreshCount--;
+            if (timerEl) timerEl.innerText = `Update in ${refreshCount}s`;
+
+            // 3. Trigger Update
+            if (refreshCount <= 0) {
+                console.log("Triggering Auto-Refresh...");
+                
+                // Pass the global 'accounts' variable safely
+                // Ensure 'globalAccountsData' or 'accounts' matches your variable name
+                const targetAccounts = (typeof globalAccountsData !== 'undefined') ? globalAccountsData : accounts;
+                
+                updateWithLiveMarketData(targetAccounts, true);
+                
+                // Reset Timer
+                refreshCount = isMarketOpen() ? 15 : 60;
+            }
         }, 1000);
     }
 
@@ -2713,6 +2712,7 @@
 </script>
 </body>
 </html>
+
 
 
 
