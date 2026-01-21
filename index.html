@@ -1149,19 +1149,16 @@
     // 1. ROBUST FETCH FUNCTION (Manual Calc Fix)
     // ==========================================
     // GLOBAL CIRCUIT BREAKER: Stops fetching if proxies are down to prevent freezing
-    let globalFetchErrors = 0;
-    const MAX_CONSECUTIVE_ERRORS = 3;
-
-    // UPDATED: Uses AllOrigins 'Wrapper Mode' to prevent CORS errors
+    // UPDATED: Uses Query1/Query2 rotation and removes dead proxies
     async function getExtendedPerformance(ticker) {
         if (!ticker || ticker === 'Unknown' || ticker === '-') return null;
         const cleanTicker = TICKER_MAP[ticker] || ticker.split(' ')[0]; 
         
-        // Cache Buster: Changes every 60 seconds to allow caching but prevent stale data
+        // Cache Buster: Change only once per minute to prevent proxy bans
         const cacheBuster = Math.floor(Date.now() / 60000); 
 
-        // Timeout Helper
-        const fetchWithTimeout = async (url, timeout = 5000) => {
+        // TIMEOUT HELPER
+        const fetchWithTimeout = async (url, timeout = 4000) => {
             const controller = new AbortController();
             const id = setTimeout(() => controller.abort(), timeout);
             try {
@@ -1171,85 +1168,77 @@
             } catch (err) { clearTimeout(id); throw err; }
         };
 
-        // DELAY: Small pause to be polite to the API
-        const randomDelay = Math.floor(Math.random() * 200) + 100;
-        await new Promise(r => setTimeout(r, randomDelay));
-
-        // PROXY STRATEGY
-        // 1. AllOrigins (/get) -> Best for CORS, returns JSON with 'contents'
-        // 2. CorsProxy -> Backup
+        // 1. PROXY LIST (Removed dead 'thingproxy')
         const proxies = [
-            'https://api.allorigins.win/get?url=',
-            'https://corsproxy.io/?'
+            'https://corsproxy.io/?',              // Fastest if working
+            'https://api.allorigins.win/raw?url=', // Good fallback
+            'https://api.codetabs.com/v1/proxy?quest=' // Strict parsing
         ];
 
-        // Yahoo Endpoints
-        const quoteUrl = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${cleanTicker}&_cb=${cacheBuster}`;
-        const chartUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${cleanTicker}?range=5y&interval=1d&_cb=${cacheBuster}`;
+        // 2. ENDPOINTS (Rotates between query1 and query2 to bypass blocks)
+        const endpoints = [
+            'https://query1.finance.yahoo.com',
+            'https://query2.finance.yahoo.com'
+        ];
 
         let quoteData = null;
         let chartData = null;
 
-        // 1. FETCH QUOTE
-        for (const proxy of proxies) {
-            try {
-                const target = proxy + encodeURIComponent(quoteUrl);
-                const res = await fetchWithTimeout(target);
-                
-                if (res.ok) {
-                    const json = await res.json();
-                    
-                    // HANDLE WRAPPER (AllOrigins uses 'contents')
-                    let body = json;
-                    if (json.contents) {
-                        try { body = JSON.parse(json.contents); } 
-                        catch (e) { continue; } // Parse fail usually means Yahoo error page
-                    }
+        // --- FETCH LOGIC ---
+        // We try proxies sequentially. Inside each proxy, we try endpoints.
+        
+        async function tryFetch(path) {
+            for (const proxy of proxies) {
+                for (const domain of endpoints) {
+                    try {
+                        // Construct URL
+                        const targetUrl = `${domain}${path}&_cb=${cacheBuster}`;
+                        const finalUrl = proxy + encodeURIComponent(targetUrl);
+                        
+                        const res = await fetchWithTimeout(finalUrl);
+                        if (!res.ok) continue;
 
-                    if (body.quoteResponse?.result?.length > 0) {
-                        quoteData = body.quoteResponse.result[0];
-                        break; // Success
+                        const text = await res.text();
+                        
+                        // Parse JSON (Handle various proxy wrappers)
+                        let data;
+                        try { data = JSON.parse(text); } catch(e) { continue; }
+                        if (data.contents) {
+                            try { data = JSON.parse(data.contents); } catch(e) { } 
+                        }
+
+                        // Success Checks
+                        if (data.quoteResponse?.result?.length > 0) return data.quoteResponse.result[0];
+                        if (data.chart?.result?.length > 0) return data.chart.result[0];
+
+                    } catch (e) { 
+                        // console.warn(`Failed: ${proxy} -> ${domain}`); 
                     }
                 }
-            } catch (e) { } // Silent fail, try next proxy
+            }
+            return null;
         }
 
-        // 2. FETCH CHART (Only if needed)
-        for (const proxy of proxies) {
-            try {
-                const target = proxy + encodeURIComponent(chartUrl);
-                const res = await fetchWithTimeout(target);
-                
-                if (res.ok) {
-                    const json = await res.json();
-                    
-                    let body = json;
-                    if (json.contents) {
-                        try { body = JSON.parse(json.contents); } 
-                        catch (e) { continue; }
-                    }
+        // 1. GET QUOTE (Price)
+        quoteData = await tryFetch(`/v7/finance/quote?symbols=${cleanTicker}`);
 
-                    if (body.chart?.result?.length > 0) {
-                        chartData = body.chart.result[0];
-                        break;
-                    }
-                }
-            } catch (e) { }
-        }
+        // 2. GET CHART (History) - Only if Quote didn't provide everything we need
+        // We fetch 5y to ensure we have enough data for the 1D calc if needed
+        chartData = await tryFetch(`/v8/finance/chart/${cleanTicker}?range=5y&interval=1d`);
 
         if (!quoteData && !chartData) return null;
 
-        // --- DATA PROCESSING (Preserved from previous working version) ---
+        // --- MERGE & CALCULATE ---
         let currentPrice = quoteData?.regularMarketPrice || chartData?.meta?.regularMarketPrice || 0;
         let prevClose = quoteData?.regularMarketPreviousClose || 0;
 
-        // Fallback PrevClose
+        // Fallback for PrevClose (Critical for 1D Change)
         if (!prevClose && chartData && chartData.indicators.quote[0].close) {
             const closes = chartData.indicators.quote[0].close.filter(c => c !== null);
             if (closes.length >= 2) prevClose = closes[closes.length - 2];
         }
 
-        // 1D Change Calc
+        // Manual 1D Calculation
         let p1d = 0;
         if (currentPrice && prevClose) p1d = (currentPrice - prevClose) / prevClose;
 
@@ -2735,6 +2724,7 @@
 </script>
 </body>
 </html>
+
 
 
 
