@@ -1150,59 +1150,74 @@
     // ==========================================
     // FIXED: Manually finds "Yesterday's Close" from the array to avoid 5-Year bug
     // UPDATED: Includes Cache-Busting to force "Fresh" data on every call
+    // UPDATED: New Proxy List (Codetabs & Thingproxy) to fix 401 Errors
     async function getExtendedPerformance(ticker) {
         if (!ticker || ticker === 'Unknown' || ticker === '-') return null;
         const cleanTicker = TICKER_MAP[ticker] || ticker.split(' ')[0]; 
-        const cacheBuster = Date.now(); // Unique timestamp
+        const cacheBuster = Date.now(); 
 
-        // Timeout Helper
-        const fetchWithTimeout = async (url, timeout = 3000) => {
+        // TIMEOUT HELPER
+        const fetchWithTimeout = async (url, timeout = 4000) => {
             const controller = new AbortController();
             const id = setTimeout(() => controller.abort(), timeout);
             try {
                 const response = await fetch(url, { signal: controller.signal });
                 clearTimeout(id);
                 return response;
-            } catch (err) { clearTimeout(id); throw err; }
+            } catch (err) {
+                clearTimeout(id);
+                throw err;
+            }
         };
 
-        const randomDelay = Math.floor(Math.random() * 300) + 100;
+        // Small random delay to be polite to the new proxies
+        const randomDelay = Math.floor(Math.random() * 200) + 50;
         await new Promise(r => setTimeout(r, randomDelay));
 
-        const proxies = ['https://corsproxy.io/?', 'https://api.allorigins.win/raw?url='];
-        
-        // ADDED CACHE BUSTER (&_cb=...)
+        // NEW PROXY LIST (Prioritizing ones that aren't blocked yet)
+        const proxies = [
+            'https://api.codetabs.com/v1/proxy?quest=', // Currently most reliable
+            'https://thingproxy.freeboard.io/fetch/',   // Good backup
+            'https://api.allorigins.win/raw?url='       // Last resort
+        ];
+
+        // Yahoo URLs
         const quoteUrl = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${cleanTicker}&_cb=${cacheBuster}`;
         const chartUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${cleanTicker}?range=5y&interval=1d&_cb=${cacheBuster}`;
 
         let quoteData = null;
         let chartData = null;
 
-        // 1. Fetch Quote
+        // 1. FETCH QUOTE (Price)
         for (const proxy of proxies) {
             try {
                 const res = await fetchWithTimeout(proxy + encodeURIComponent(quoteUrl));
                 if (res.ok) {
                     const json = await res.json();
+                    // Handle different proxy return structures
                     const data = json.contents ? JSON.parse(json.contents) : json;
-                    if (data.quoteResponse?.result?.length > 0) {
+                    
+                    if (data.quoteResponse && data.quoteResponse.result.length > 0) {
                         quoteData = data.quoteResponse.result[0];
-                        break;
+                        break; // Success!
                     }
                 }
-            } catch (e) { }
+            } catch (e) { 
+                // console.warn(`Quote failed on ${proxy}`); // Optional debug
+            }
         }
 
-        // 2. Fetch Chart
+        // 2. FETCH CHART (History)
         for (const proxy of proxies) {
             try {
                 const res = await fetchWithTimeout(proxy + encodeURIComponent(chartUrl));
                 if (res.ok) {
                     const json = await res.json();
                     const data = json.contents ? JSON.parse(json.contents) : json;
-                    if (data.chart?.result?.length > 0) {
+                    
+                    if (data.chart && data.chart.result.length > 0) {
                         chartData = data.chart.result[0];
-                        break;
+                        break; // Success!
                     }
                 }
             } catch (e) { }
@@ -1210,20 +1225,21 @@
 
         if (!quoteData && !chartData) return null;
 
-        // --- CALCULATION LOGIC (Preserving your 1D Fix) ---
+        // --- CALCULATION LOGIC ---
         let currentPrice = quoteData?.regularMarketPrice || chartData?.meta?.regularMarketPrice || 0;
         let prevClose = quoteData?.regularMarketPreviousClose || 0;
         
-        // Fallback for Previous Close
+        // Fallback for Previous Close from Chart if Quote failed
         if (!prevClose && chartData && chartData.indicators.quote[0].close) {
             const closes = chartData.indicators.quote[0].close.filter(c => c !== null);
             if (closes.length >= 2) prevClose = closes[closes.length - 2];
         }
 
+        // 1D Change
         let p1d = 0;
         if (currentPrice && prevClose) p1d = (currentPrice - prevClose) / prevClose;
 
-        // History
+        // History Metrics
         let p1w=0, p1m=0, p3m=0, p6m=0, p1y=0, p5y=0, pMax=0;
         if (chartData && chartData.timestamp) {
             const closes = chartData.indicators.quote[0].close;
@@ -1238,6 +1254,7 @@
                     for(let i=cleanT.length-1; i>=0; i--) { if(cleanT[i] <= target) return cleanC[i]; }
                     return cleanC[0];
                 };
+                
                 const v1w = getPriceAgo(7);
                 const v1m = getPriceAgo(30);
                 const v3m = getPriceAgo(90);
@@ -1262,11 +1279,11 @@
             p1d, p1w, p1m, p3m, p6m, p1y, p5y, pMax 
         };
     }
-
     // ==========================================
     // 2. MAIN UPDATE FUNCTION ("Shotgun" Fix)
     // ==========================================
-    async function updateWithLiveMarketData(accounts, isSilent = false) {
+    // UPDATED: Seamless Background Updates (No freezing/blocking UI)
+    async function updateWithLiveMarketData(accounts, isManual = false) {
         if (isUpdating) return;
         isUpdating = true;
         
@@ -1274,25 +1291,26 @@
         const headerStatus = document.getElementById('latest-date-display');
         const btn = document.getElementById('manual-refresh-btn');
         
-        // UI STATUS
-        if (!isSilent && statusDiv) {
+        // UI: Only show big loader if MANUAL click. Otherwise, subtle header update.
+        if (isManual && statusDiv) {
             statusDiv.style.display = 'flex';
             statusDiv.style.opacity = '1';
-            statusDiv.innerHTML = "Fetching Market Data...<br><span style='font-size:0.8em'>Correcting 1D Values...</span>";
-        } else if (btn) {
-            btn.innerHTML = "<span>↻</span> ...";
+            statusDiv.innerHTML = "Refreshing Market Data...<br><span style='font-size:0.8em'>Connecting to new proxy...</span>";
+        } else if (headerStatus) {
+            headerStatus.innerHTML = "<span class='live-dot' style='background:orange'></span> Updating...";
         }
+        
+        if(btn) btn.innerHTML = "<span>↻</span> ...";
 
         try {
-            // 1. Update Watchlist
+            // 1. Watchlist Update
             if (typeof userWatchlist !== 'undefined') {
                 watchlistDataStore = [];
                 for (const ticker of userWatchlist) {
                     const data = await getExtendedPerformance(ticker);
                     if(data) {
                         watchlistDataStore.push({
-                            ticker: ticker, price: data.price,
-                            dayChange: data.p1d, // Watchlist usually looks for dayChange
+                            ticker: ticker, price: data.price, dayChange: data.p1d,
                             p1w: data.p1w, p1m: data.p1m, p3m: data.p3m, 
                             p6m: data.p6m, p1y: data.p1y, p5y: data.p5y
                         });
@@ -1301,57 +1319,44 @@
                 if (typeof renderWatchlistColumns === 'function') renderWatchlistColumns();
             }
 
-            // 2. Update Accounts
+            // 2. Account Update
             let totalDayChange = 0;
             let runningTotal = 0;
 
             for (const acc of accounts) {
-                // Determine Ticker
                 const override = accountOverrides[acc.id];
                 let ticker = override ? override.ticker : (acc.data[acc.data.length-1]?.invested);
                 
-                // Fallbacks
                 if (acc.id.toLowerCase().includes('fidelity')) ticker = 'GOOGL';
                 if (acc.id.toLowerCase().includes('cash')) ticker = 'BIL';
 
                 if (!ticker || ticker === 'Unknown' || ticker === '-') continue;
 
-                if (!isSilent && statusDiv) statusDiv.innerHTML = `Fetching ${acc.name} (${ticker})...`;
+                // Subtle status update in header only
+                if (!isManual && headerStatus) {
+                    headerStatus.innerHTML = `<span class='live-dot' style='background:orange'></span> ${ticker}...`;
+                }
 
                 const data = await getExtendedPerformance(ticker);
                 
                 if (data && data.price > 0) {
-                    // --- THE SHOTGUN ASSIGNMENT ---
-                    // We save the data to every possible property name the renderer might look for
                     acc.livePrice = data.price;
                     acc.lastUpdated = data.ts;
                     
-                    // 1. On the 'stats' object (Common)
                     acc.stats = {
-                        p1d: data.p1d,
-                        p1w: data.p1w, p1m: data.p1m, p3m: data.p3m, 
-                        p6m: data.p6m, p1y: data.p1y, p5y: data.p5y,
-                        mtd: data.p1m
+                        p1d: data.p1d, p1w: data.p1w, p1m: data.p1m, p3m: data.p3m, 
+                        p6m: data.p6m, p1y: data.p1y, p5y: data.p5y, mtd: data.p1m
                     };
                     
-                    // 2. Directly on the account object (Likely what your table wants)
+                    // Assign to flat properties for renderer compatibility
                     acc.p1d = data.p1d; 
                     acc.dayChange = data.p1d;
-                    acc.changePct = data.p1d;
-                    acc.dailyChange = data.p1d;
 
-                    // DEBUG: Log the first one to prove it's working
-                    if(acc === accounts[0]) {
-                        console.log(`[DEBUG] ${acc.ticker} 1D Calc: ${data.p1d * 100}%`);
-                    }
-
-                    // Update Balance Logic
+                    // Update Balance
                     const lastMonth = acc.data[acc.data.length-1];
                     if (override && override.qty) {
-                        // Precise (Shares * Price)
                         acc.value = data.price * override.qty;
                     } else {
-                        // Estimate (Baseline + Growth)
                         const growth = data.p1m || 0; 
                         if(lastMonth) acc.value = lastMonth.balance * (1 + growth);
                     }
@@ -1364,29 +1369,38 @@
                 }
             }
 
-            // 3. Update Net Worth Header
+            // 3. Update Headers
             const nw = document.getElementById('stat-networth');
             const dc = document.getElementById('stat-day-change');
             
-            if(nw) nw.innerText = fmtMoney(runningTotal);
-            if(dc) {
-                const pct = runningTotal > 0 ? (totalDayChange / (runningTotal - totalDayChange)) * 100 : 0;
+            if(nw && runningTotal > 0) nw.innerText = fmtMoney(runningTotal);
+            if(dc && runningTotal > 0) {
+                const pct = (totalDayChange / (runningTotal - totalDayChange)) * 100;
                 const color = totalDayChange >= 0 ? 'var(--profit)' : 'var(--loss)';
                 const sign = totalDayChange >= 0 ? '+' : '';
                 dc.innerHTML = `<span style="color:${color}">${sign}${fmtMoney(totalDayChange)} (${sign}${pct.toFixed(2)}%)</span>`;
             }
 
         } catch (e) {
-            console.error(e);
+            console.error("Update failed:", e);
         } finally {
             isUpdating = false;
+            
             if (btn) btn.innerHTML = "<span>↻</span> Update";
-            if (!isSilent && statusDiv) {
+            
+            // Reset header to "Live" state
+            if(headerStatus) {
+                const time = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                headerStatus.innerHTML = `<span class='live-dot' style='background:var(--profit); box-shadow: 0 0 8px var(--profit)'></span> Live ${time}`;
+            }
+
+            // Hide manual loader if it was shown
+            if (isManual && statusDiv) {
                 statusDiv.style.opacity = '0';
                 setTimeout(()=> statusDiv.style.display='none', 300);
             }
             
-            // CRITICAL: Re-render the table with the new data
+            // Re-render
             if (typeof processAndRender === 'function') processAndRender(accounts, true);
         }
     }
@@ -2712,6 +2726,7 @@
 </script>
 </body>
 </html>
+
 
 
 
