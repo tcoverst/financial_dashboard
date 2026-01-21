@@ -1148,11 +1148,12 @@
 /// ==========================================
     // 1. ROBUST FETCH FUNCTION (Manual Calc Fix)
     // ==========================================
+    // FIXED: Manually finds "Yesterday's Close" from the array to avoid 5-Year bug
     async function getExtendedPerformance(ticker) {
         if (!ticker || ticker === 'Unknown' || ticker === '-') return null;
         const cleanTicker = TICKER_MAP[ticker] || ticker.split(' ')[0]; 
 
-        // Helper: Fetch with Timeout
+        // 1. Setup
         const fetchWithTimeout = async (url, timeout = 3000) => {
             const controller = new AbortController();
             const id = setTimeout(() => controller.abort(), timeout);
@@ -1160,110 +1161,113 @@
                 const response = await fetch(url, { signal: controller.signal });
                 clearTimeout(id);
                 return response;
-            } catch (err) {
-                clearTimeout(id);
-                throw err;
-            }
+            } catch (err) { clearTimeout(id); throw err; }
         };
 
-        // Delay to prevent rate-limiting
-        const randomDelay = Math.floor(Math.random() * 300) + 100;
-        await new Promise(r => setTimeout(r, randomDelay));
-
-        const proxies = [
-            'https://corsproxy.io/?', 
-            'https://api.allorigins.win/raw?url='
-        ];
-
-        // We fetch BOTH Quote (Price) and Chart (History) to be safe
+        const proxies = ['https://corsproxy.io/?', 'https://api.allorigins.win/raw?url='];
         const quoteUrl = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${cleanTicker}`;
         const chartUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${cleanTicker}?range=5y&interval=1d`;
 
         let quoteData = null;
         let chartData = null;
 
-        // A. Fetch Quote
+        // 2. Fetch Quote (Fastest, most accurate for 1D)
         for (const proxy of proxies) {
             try {
                 const res = await fetchWithTimeout(proxy + encodeURIComponent(quoteUrl));
-                if (!res.ok) continue;
-                const json = await res.json();
-                const data = json.contents ? JSON.parse(json.contents) : json; // Handle AllOrigins wrapper
-                if (data.quoteResponse && data.quoteResponse.result.length > 0) {
-                    quoteData = data.quoteResponse.result[0];
-                    break;
+                if (res.ok) {
+                    const json = await res.json();
+                    const data = json.contents ? JSON.parse(json.contents) : json;
+                    if (data.quoteResponse?.result?.length > 0) {
+                        quoteData = data.quoteResponse.result[0];
+                        break;
+                    }
                 }
             } catch (e) { }
         }
 
-        // B. Fetch Chart
+        // 3. Fetch Chart (Required for history)
         for (const proxy of proxies) {
             try {
                 const res = await fetchWithTimeout(proxy + encodeURIComponent(chartUrl));
-                if (!res.ok) continue;
-                const json = await res.json();
-                const data = json.contents ? JSON.parse(json.contents) : json;
-                if (data.chart && data.chart.result.length > 0) {
-                    chartData = data.chart.result[0];
-                    break;
+                if (res.ok) {
+                    const json = await res.json();
+                    const data = json.contents ? JSON.parse(json.contents) : json;
+                    if (data.chart?.result?.length > 0) {
+                        chartData = data.chart.result[0];
+                        break;
+                    }
                 }
             } catch (e) { }
         }
 
         if (!quoteData && !chartData) return null;
 
-        // --- C. CRITICAL: DETERMINE PRICE & PREV CLOSE ---
-        const currentPrice = quoteData?.regularMarketPrice || chartData?.meta?.regularMarketPrice || 0;
-        
-        // We look for Previous Close in multiple places to ensure we find it
-        let prevClose = quoteData?.regularMarketPreviousClose || 
-                        chartData?.meta?.chartPreviousClose || 
-                        chartData?.meta?.previousClose || 0;
-
-        // MANUAL CALCULATION: (Price - Prev) / Prev
-        // This is the only way to guarantee 0.00% is not returned erroneously
+        // --- CRITICAL FIX: DETERMINE 1-DAY CHANGE CORRECTLY ---
+        let currentPrice = 0;
+        let prevClose = 0;
         let p1d = 0;
-        if (currentPrice && prevClose) {
+
+        // Priority 1: Use Quote Data (Best)
+        if (quoteData && quoteData.regularMarketPrice && quoteData.regularMarketPreviousClose) {
+            currentPrice = quoteData.regularMarketPrice;
+            prevClose = quoteData.regularMarketPreviousClose;
             p1d = (currentPrice - prevClose) / prevClose;
+        } 
+        // Priority 2: Use Chart Data (Manual Calculation)
+        else if (chartData && chartData.indicators.quote[0].close) {
+            const closes = chartData.indicators.quote[0].close;
+            // Clean nulls from the end of the array
+            const cleanCloses = closes.filter(c => c !== null);
+            
+            if (cleanCloses.length >= 2) {
+                currentPrice = cleanCloses[cleanCloses.length - 1];
+                // THE FIX: Explicitly grab the 2nd to last item for Yesterday's Price
+                prevClose = cleanCloses[cleanCloses.length - 2]; 
+                p1d = (currentPrice - prevClose) / prevClose;
+            }
         }
 
-        // --- D. HISTORY METRICS (From Chart) ---
+        // --- HISTORY CALCULATIONS (5y, 1y, etc) ---
         let p1w=0, p1m=0, p3m=0, p6m=0, p1y=0, p5y=0, pMax=0;
+        
         if (chartData && chartData.timestamp) {
-            const adjClose = chartData.indicators.quote[0].close;
+            const closes = chartData.indicators.quote[0].close;
             const times = chartData.timestamp;
+            const cleanC = [], cleanT = [];
             
-            // Filter nulls
-            const cleanC = []; const cleanT = [];
-            adjClose.forEach((c, i) => { if(c) { cleanC.push(c); cleanT.push(times[i]); }});
+            closes.forEach((c, i) => { if (c) { cleanC.push(c); cleanT.push(times[i]); }});
 
-            if(cleanC.length > 0) {
+            if (cleanC.length > 0) {
+                const base = currentPrice;
                 const getPriceAgo = (days) => {
                     const target = cleanT[cleanT.length-1] - (days * 86400);
                     for(let i=cleanT.length-1; i>=0; i--) { if(cleanT[i] <= target) return cleanC[i]; }
                     return cleanC[0];
                 };
-                const base = currentPrice;
+
                 const v1w = getPriceAgo(7);
                 const v1m = getPriceAgo(30);
                 const v3m = getPriceAgo(90);
                 const v6m = getPriceAgo(180);
                 const v1y = getPriceAgo(365);
                 const v5y = getPriceAgo(1825);
-                
+                const vMax = cleanC[0];
+
                 if(v1w) p1w = (base - v1w)/v1w;
                 if(v1m) p1m = (base - v1m)/v1m;
                 if(v3m) p3m = (base - v3m)/v3m;
                 if(v6m) p6m = (base - v6m)/v6m;
                 if(v1y) p1y = (base - v1y)/v1y;
                 if(v5y) p5y = (base - v5y)/v5y;
+                if(vMax) pMax = (base - vMax)/vMax;
             }
         }
 
         return { 
             price: currentPrice, 
             ts: Date.now(), 
-            p1d: p1d, // Verified Decimal (e.g., 0.024 for 2.4%)
+            p1d: p1d, // Verified correct 1-Day change
             p1w, p1m, p3m, p6m, p1y, p5y, pMax 
         };
     }
@@ -2709,6 +2713,7 @@
 </script>
 </body>
 </html>
+
 
 
 
