@@ -1719,12 +1719,14 @@
             if (!ticker || ticker === 'Unknown' || ticker === '-') return null;
             const cleanTicker = TICKER_MAP[ticker] || ticker.split(' ')[0];
 
-            // UPDATED PROXY LIST (Shotgun Approach - 2025)
+            // UPDATED PROXY LIST (Refined for Stability)
+            // 1. AllOrigins (Best for hosted sites, strips Origin)
+            // 2. CorsProxy.io (Backup)
+            // 3. ThingProxy (Backup)
             const proxies = [
-                'https://cors.lol/?url=',
-                'https://test.cors.workers.dev/?url=',
+                'https://api.allorigins.win/get?url=',
                 'https://corsproxy.io/?',
-                'https://api.allorigins.win/get?url='
+                'https://thingproxy.freeboard.io/fetch/'
             ];
 
             const cacheBuster = `&_=${new Date().getTime()}`;
