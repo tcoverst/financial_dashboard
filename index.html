@@ -1330,7 +1330,8 @@
                         investment contribution.<br>
                         <ul>
                             <li><strong>Raises Applied:</strong> <span id="jan-raise-display">6.0%</span> in January,
-                                <span id="july-raise-display">3.0%</span> in July.</li>
+                                <span id="july-raise-display">3.0%</span> in July.
+                            </li>
                             <li><strong>Calculation:</strong> <code>RaiseAmount = CurrentBaseSalary × Raise%</code>.
                             </li>
                             <li><strong>Result:</strong> This specific dollar amount is added to every future paycheck
@@ -1721,13 +1722,13 @@
             const proxies = [
                 'https://corsproxy.io/?',
                 'https://api.allorigins.win/get?url=',
-                'https://thingproxy.freeboard.io/fetch/'
+                'https://api.codetabs.com/v1/proxy?quest='
             ];
 
             const cacheBuster = `&_=${new Date().getTime()}`;
 
             // Use range=max to get long history for 1Y/3Y/5Y calculations
-            const targetUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${cleanTicker}?range=max&interval=1d${cacheBuster}`;
+            const targetUrl = `https://query2.finance.yahoo.com/v8/finance/chart/${cleanTicker}?range=max&interval=1d${cacheBuster}`;
 
             for (const proxy of proxies) {
                 try {
@@ -1920,6 +1921,9 @@
                         if (acc.id.includes('fidelity')) ticker = 'GOOGL';
                         if (acc.id.includes('boeing')) ticker = 'Boeing (Bonds)';
                         if (acc.id.includes('wells')) ticker = 'Wells Fargo (Cash)';
+                        if (acc.id.includes('vanguardA')) ticker = 'VIGIX';
+                        if (acc.id.includes('vanguardB')) ticker = 'VTSAX';
+                        if (acc.id.includes('vanguardUTMA')) ticker = 'VIGIX';
                     }
 
                     const marketData = await getExtendedPerformance(ticker);
