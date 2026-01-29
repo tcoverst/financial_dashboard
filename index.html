@@ -1719,24 +1719,38 @@
             if (!ticker || ticker === 'Unknown' || ticker === '-') return null;
             const cleanTicker = TICKER_MAP[ticker] || ticker.split(' ')[0];
 
+            // UPDATED PROXY LIST (Shotgun Approach - 2025)
             const proxies = [
+                'https://cors.lol/?url=',
+                'https://test.cors.workers.dev/?url=',
                 'https://corsproxy.io/?',
-                'https://api.allorigins.win/get?url=',
-                'https://api.codetabs.com/v1/proxy?quest='
+                'https://api.allorigins.win/get?url='
             ];
 
             const cacheBuster = `&_=${new Date().getTime()}`;
-
-            // Use range=max to get long history for 1Y/3Y/5Y calculations
-            const targetUrl = `https://query2.finance.yahoo.com/v8/finance/chart/${cleanTicker}?range=max&interval=1d${cacheBuster}`;
+            // SWITCHED TO QUERY1 (Potential Blocking Bypass)
+            const targetUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${cleanTicker}?range=max&interval=1d${cacheBuster}`;
 
             for (const proxy of proxies) {
                 try {
-                    let fetchUrl = proxy.includes('allorigins') ? proxy + encodeURIComponent(targetUrl) : proxy + targetUrl;
-                    const response = await fetch(fetchUrl);
-                    if (!response.ok) throw new Error('Network');
+                    let fetchUrl;
+                    // Most proxies expect encoded URL, but some work better with raw
+                    if (proxy.includes('corsproxy.io')) {
+                        fetchUrl = proxy + targetUrl;
+                    } else {
+                        fetchUrl = proxy + encodeURIComponent(targetUrl);
+                    }
 
-                    let data = proxy.includes('allorigins') ? JSON.parse((await response.json()).contents) : await response.json();
+                    const response = await fetch(fetchUrl);
+                    if (!response.ok) throw new Error(`Status ${response.status}`);
+
+                    let data;
+                    if (proxy.includes('allorigins')) {
+                        const json = await response.json();
+                        data = JSON.parse(json.contents);
+                    } else {
+                        data = await response.json();
+                    }
 
                     if (!data.chart || !data.chart.result || data.chart.result.length === 0) continue;
 
@@ -1749,14 +1763,10 @@
 
                     // --- KEY FIX FOR LIVE PRICE & DAY CHANGE ---
                     // We prioritize META data which comes from the dashboard header
-                    // regularMarketPrice = Current Live Price (or Closing Price if market closed)
-                    // chartPreviousClose = Official Close of previous session
-
                     let currentPrice = meta.regularMarketPrice;
                     let prevClose = meta.previousClose;
 
                     // --- HISTORY LOGIC ---
-                    // We still need the array for finding Last Week, Last Month, etc.
                     let lastIndex = -1;
                     for (let i = closes.length - 1; i >= 0; i--) {
                         if (closes[i] !== null) {
@@ -1768,7 +1778,7 @@
                     const lastTimestamp = timestamps[lastIndex];
                     const lastDate = new Date(lastTimestamp * 1000);
 
-                    // Fallback for prevClose if meta is missing or unreliable
+                    // Fallback for prevClose
                     if (!prevClose) {
                         for (let j = lastIndex - 1; j >= 0; j--) {
                             if (closes[j] !== null) { prevClose = closes[j]; break; }
@@ -1790,7 +1800,7 @@
                         return closes.find(c => c !== null); // fallback to earliest
                     };
 
-                    // Calculate Month To Date Baseline (For Account Value)
+                    // Calculate Month To Date Baseline
                     const now = new Date();
                     const startOfCurrentMonth = new Date(now.getFullYear(), now.getMonth(), 1);
                     let mtdBaseline = null;
@@ -1804,11 +1814,7 @@
                         price: currentPrice,
                         ts: lastTimestamp,
                         mtdRate: (mtdBaseline && currentPrice) ? (currentPrice - mtdBaseline) / mtdBaseline : 0,
-
-                        // METRICS
-                        // 1D: Explicitly uses (Live - Official Prev Close) / Official Prev Close
                         p1d: (prevClose && currentPrice) ? (currentPrice - prevClose) / prevClose : 0,
-
                         p1w: (getPriceAgo(7, 'days') && currentPrice) ? (currentPrice - getPriceAgo(7, 'days')) / getPriceAgo(7, 'days') : 0,
                         p1m: (getPriceAgo(1, 'months') && currentPrice) ? (currentPrice - getPriceAgo(1, 'months')) / getPriceAgo(1, 'months') : 0,
                         p3m: (getPriceAgo(3, 'months') && currentPrice) ? (currentPrice - getPriceAgo(3, 'months')) / getPriceAgo(3, 'months') : 0,
@@ -1820,7 +1826,8 @@
                     };
 
                 } catch (e) {
-                    console.warn(`Proxy failed for ${cleanTicker}`);
+                    console.warn(`Proxy ${proxy} failed for ${cleanTicker}:`, e);
+                    // Try next proxy
                 }
             }
             return null;
