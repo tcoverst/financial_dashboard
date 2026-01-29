@@ -1724,9 +1724,9 @@
             // 2. CorsProxy.io (Backup)
             // 3. ThingProxy (Backup)
             const proxies = [
-                'https://api.allorigins.win/get?url=',
                 'https://corsproxy.io/?',
-                'https://thingproxy.freeboard.io/fetch/'
+                'https://api.codetabs.com/v1/proxy?quest=',
+                'https://api.allorigins.win/get?url='
             ];
 
             const cacheBuster = `&_=${new Date().getTime()}`;
@@ -1737,7 +1737,7 @@
                 try {
                     let fetchUrl;
                     // Most proxies expect encoded URL, but some work better with raw
-                    if (proxy.includes('corsproxy.io')) {
+                    if (proxy.includes('corsproxy.io') || proxy.includes('codetabs')) {
                         fetchUrl = proxy + targetUrl;
                     } else {
                         fetchUrl = proxy + encodeURIComponent(targetUrl);
